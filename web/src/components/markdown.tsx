@@ -57,6 +57,7 @@ export function Markdown({ className, text }: { className?: string; text: string
     el.addEventListener("error", failed, true);
     return () => el.removeEventListener("error", failed, true);
   }, []);
+  useCopyButtons(body, html);
   const chips = useFileChips(body, session, html);
   return (
     <div className={cn("grid min-w-0 gap-2", className)}>
@@ -66,6 +67,8 @@ export function Markdown({ className, text }: { className?: string; text: string
         data-selectable=""
         onClick={(event) => {
           const target = event.target as HTMLElement;
+          const copy = target.closest<HTMLButtonElement>(".code-copy");
+          if (copy) { event.preventDefault(); void copyCode(copy); return; }
           if (target instanceof HTMLImageElement) { event.preventDefault(); openImage(target.src); return; }
           const chip = target.closest<HTMLElement>("[data-file-kind]");
           const info = chip && found.get(chip);
@@ -81,6 +84,41 @@ export function Markdown({ className, text }: { className?: string; text: string
       ) : null}
     </div>
   );
+}
+
+const COPY_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+const DONE_ICON = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>';
+
+/** Wraps each code block so a copy button can sit in its top-right corner without scrolling with the code. */
+function useCopyButtons(body: React.RefObject<HTMLDivElement | null>, html: string) {
+  React.useEffect(() => {
+    const el = body.current;
+    if (!el) return;
+    for (const pre of el.querySelectorAll("pre")) {
+      if (pre.parentElement?.classList.contains("code-wrap")) continue;
+      const wrap = document.createElement("div");
+      wrap.className = "code-wrap";
+      pre.replaceWith(wrap);
+      wrap.append(pre);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "code-copy";
+      button.title = "Copy";
+      button.setAttribute("aria-label", "Copy code");
+      button.innerHTML = COPY_ICON;
+      wrap.append(button);
+    }
+  }, [body, html]);
+}
+
+const resetTimers = new WeakMap<HTMLElement, number>();
+async function copyCode(button: HTMLButtonElement) {
+  const pre = button.parentElement?.querySelector("pre");
+  if (!pre) return;
+  try { await navigator.clipboard.writeText(pre.textContent ?? ""); } catch { return; }
+  button.innerHTML = DONE_ICON;
+  window.clearTimeout(resetTimers.get(button));
+  resetTimers.set(button, window.setTimeout(() => { button.innerHTML = COPY_ICON; }, 1500));
 }
 
 // The file each chip opens, kept beside the DOM the markdown owns.
