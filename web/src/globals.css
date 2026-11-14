@@ -98,3 +98,6 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Shiki writes both themes' colours; the dark theme takes its own. */
+:root[data-theme="dark"] .code-tokens span[style] { color: var(--shiki-dark) !important; }

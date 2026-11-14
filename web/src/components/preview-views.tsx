@@ -9,6 +9,8 @@ import { formatBytes } from "@/lib/format";
 import { looksLikePath, parseRef, type FileKind } from "@/lib/file-mentions";
 import { openPreview } from "@/lib/preview";
 import { cn } from "@/lib/utils";
+import { highlightLines } from "@/lib/highlight";
+import type { ThemedToken } from "shiki/core";
 import { Button } from "@/ui/button";
 import { ErrorState, LoadingList } from "@/ui/page";
 
@@ -54,17 +56,19 @@ function FileFacts({ data, raw }: { data: FileData; raw: string }) {
 }
 
 /** Plain text with line numbers; `line` is scrolled to and marked. */
-export function CodeView({ line, text }: { line?: number; name: string; text: string }) {
-  const lines = React.useMemo(() => text.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n"), [text]);
-  const target = React.useRef<HTMLDivElement>(null);
+export function CodeView({ line, name, text }: { line?: number; name: string; text: string }) {
+  const clean = React.useMemo(() => text.replace(/\r\n/g, "\n").replace(/\n$/, ""), [text]);
+  const lines = React.useMemo(() => clean.split("\n"), [clean]);
+  const tokens = useTokens(clean, name);
+  const target = React.useRef<HTMLSpanElement>(null);
   React.useEffect(() => { target.current?.scrollIntoView({ block: "center" }); }, [line, text]);
   return (
-    <div className="overflow-x-auto rounded-tile bg-surface-raised py-3 font-mono text-[0.8125rem] leading-[1.6]" data-selectable="">
+    <div className="code-tokens overflow-x-auto rounded-tile bg-surface-raised py-3 font-mono text-[0.8125rem] leading-[1.6]" data-selectable="">
       <div className="grid min-w-max grid-cols-[auto_1fr]">
         {lines.map((l, i) => (
-          <div className={cn("contents", line === i + 1 && "[&>*]:bg-accent-soft")} key={i} ref={line === i + 1 ? target : undefined}>
-            <span className="select-none px-3 text-right text-ink-faint">{i + 1}</span>
-            <span className="whitespace-pre pr-4">{l || " "}</span>
+          <div className={cn("contents", line === i + 1 && "[&>*]:bg-accent-soft")} key={i}>
+            <span className="select-none px-3 text-right text-ink-faint" ref={line === i + 1 ? target : undefined}>{i + 1}</span>
+            <span className="whitespace-pre pr-4">{tokens?.[i] ? <Tokens line={tokens[i]} /> : l || " "}</span>
           </div>
         ))}
       </div>
@@ -72,14 +76,13 @@ export function CodeView({ line, text }: { line?: number; name: string; text: st
   );
 }
 
-const SEP = /[\\/]/;
 const dirOf = (p: string) => p.slice(0, Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\")) + 1);
 const isRelative = (p: string) => !/^(?:[A-Za-z]:[\\/]|\/|~[\\/]|\\\\|[a-z][\w+.-]*:|#)/i.test(p);
 
 /** A markdown file, rendered; its relative images and links are read from the file's own folder. */
 function MarkdownFile({ data, session }: { data: FileData; session: string }) {
   const dir = dirOf(data.path);
-  const join = React.useCallback((p: string) => (isRelative(p) ? dir + p.replace(/^\.[\\/]/, "").replace(SEP, dir.includes("\\") ? "\\" : "/") : p), [dir]);
+  const join = React.useCallback((p: string) => (isRelative(p) ? dir + p.replace(/^\.[\\/]/, "") : p), [dir]);
   const html = React.useMemo(() => {
     const box = document.createElement("template");
     box.innerHTML = marked.parse(data.text ?? "", { async: false, gfm: true }) as string;
@@ -116,4 +119,20 @@ export function OpenRaw({ path, session }: { path: string; session: string }) {
       <a href={fileUrl(session, "raw", path)} rel="noopener noreferrer" target="_blank"><ArrowSquareOut /></a>
     </Button>
   );
+}
+
+/** Coloured lines for a file's text, once the highlighter has them; null meanwhile or for unknown languages. */
+export function useTokens(text: string, name: string) {
+  const [state, setState] = React.useState<{ key: string; tokens: ThemedToken[][] | null } | null>(null);
+  const key = `${name}\n${text}`;
+  React.useEffect(() => {
+    let live = true;
+    highlightLines(text, name).then((tokens) => { if (live) setState({ key, tokens }); }).catch(() => {});
+    return () => { live = false; };
+  }, [key, text, name]);
+  return state?.key === key ? state.tokens : null;
+}
+
+export function Tokens({ line }: { line: ThemedToken[] }) {
+  return <>{line.map((t, i) => <span key={i} style={t.htmlStyle as React.CSSProperties}>{t.content}</span>)}</>;
 }
