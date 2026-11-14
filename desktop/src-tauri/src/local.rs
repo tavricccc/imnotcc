@@ -84,7 +84,7 @@ fn join_job(child: &std::process::Child) -> bool {
     }
 }
 
-fn port_in_use(port: u16) -> bool {
+pub fn port_in_use(port: u16) -> bool {
     let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
 }

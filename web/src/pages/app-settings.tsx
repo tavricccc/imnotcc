@@ -216,7 +216,7 @@ function DesktopSettings() {
       const list = origins.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
       await tauriInvoke("save_local_settings", { port: numPort, origins: list });
       setHostOpen(false);
-      toast.success("已儲存並重啟本機 Server");
+      toast.success("已儲存設定");
       setTimeout(() => { void load(); }, 1000);
     } catch (error) {
       toast.error(String(error));
@@ -334,7 +334,7 @@ function DesktopSettings() {
         </form>
       </Sheet>
 
-      <Sheet description="儲存後會自動重啟本機 Server 以套用新設定。" onOpenChange={setHostOpen} open={hostOpen} title="本機 Server 設定">
+      <Sheet description="有變更時會重啟本機 Server 套用，執行中的 session 會中斷幾秒。新的 port 起不來會自動恢復原設定。" onOpenChange={setHostOpen} open={hostOpen} title="本機 Server 設定">
         <form className="grid gap-4 pb-2" onSubmit={saveHostSettings}>
           <Field label="連接埠（Port）">
             {({ id }) => <Input id={id} max={65535} min={1} onChange={(e) => setPort(e.target.value)} required type="number" value={port} />}

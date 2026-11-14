@@ -332,30 +332,71 @@ fn open_node_download(app: AppHandle, window: WebviewWindow) -> Result<(), Strin
     std::process::Command::new("explorer").arg("https://nodejs.org/en/download").spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Reduce `raw` to a bare origin (`scheme://host[:port]`), or say why it is not one.
+fn clean_origin(raw: &str) -> Result<String, String> {
+    let raw = raw.trim().trim_end_matches('/');
+    let bad = || format!("「{raw}」不是有效的網域，要像 https://cc.example.com 這樣");
+    let u: tauri::Url = raw.parse().map_err(|_| bad())?;
+    if !matches!(u.scheme(), "http" | "https") || u.host_str().is_none() || u.path() != "/" || u.query().is_some() || u.fragment().is_some() || !u.username().is_empty() {
+        return Err(bad());
+    }
+    Ok(u.origin().ascii_serialization())
+}
+
 #[tauri::command]
-fn save_local_settings(app: AppHandle, window: WebviewWindow, port: u16, origins: Vec<String>) -> Result<Config, String> {
+async fn save_local_settings(app: AppHandle, window: WebviewWindow, port: u16, origins: Vec<String>) -> Result<Config, String> {
     from_trusted_page(&app, &window)?;
     if port == 0 {
         return Err("連接埠不能為 0".into());
     }
-    let clean_origins: Vec<String> = origins.into_iter().map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty()).collect();
+    let mut clean: Vec<String> = Vec::new();
+    for o in origins.iter().filter(|s| !s.trim().is_empty()) {
+        let o = clean_origin(o)?;
+        if !clean.contains(&o) {
+            clean.push(o);
+        }
+    }
     let state = app.state::<AppState>();
-    let (c, was_local, port_changed) = {
+    let old = state.config.lock().unwrap().clone();
+    let port_changed = old.port != port;
+    if !port_changed && old.origins == clean {
+        return Ok(old);
+    }
+    if old.local && port_changed && local::port_in_use(port) {
+        return Err(format!("連接埠 {port} 已經被別的程式占用，換一個試試。"));
+    }
+    let apply = |port: u16, origins: Vec<String>| -> Result<Config, String> {
         let mut c = state.config.lock().unwrap();
-        let port_changed = c.port != port;
         c.port = port;
-        c.origins = clean_origins;
+        c.origins = origins;
         if c.local {
             c.url = Some(format!("http://127.0.0.1:{port}"));
         }
-        (c.clone(), c.local, port_changed)
+        let c = c.clone();
+        save_config(&app, &c)?;
+        Ok(c)
     };
-    save_config(&app, &c)?;
-    if was_local {
-        state.server.restart(&app);
-        if port_changed {
-            let _ = open_window(&app, c.url.clone(), true);
-        }
+    let c = apply(port, clean)?;
+    if !old.local {
+        return Ok(c);
+    }
+    // Restarting stops the server for a few seconds and waits on it, so keep it off the main thread.
+    let app2 = app.clone();
+    let ready = tauri::async_runtime::spawn_blocking(move || {
+        app2.state::<AppState>().server.restart(&app2);
+        local::wait_ready(&app2, Duration::from_secs(20))
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if !ready {
+        // Put the old settings back so the app is not left pointing at a server that never came up.
+        apply(old.port, old.origins.clone())?;
+        let app3 = app.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || app3.state::<AppState>().server.restart(&app3)).await;
+        return Err("新設定下本機 server 沒有啟動成功，已恢復原本的設定。可以到 Log 資料夾看原因。".into());
+    }
+    if port_changed {
+        open_window(&app, c.url.clone(), true)?;
     }
     Ok(c)
 }
