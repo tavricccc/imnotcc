@@ -53,8 +53,8 @@
 ## 快速開始
 
 ```bash
-git clone https://github.com/tavricccc/cc-remote.git
-cd cc-remote
+git clone https://github.com/tavricccc/imnotcc.git
+cd imnotcc
 npm install
 npm run build
 npm start
