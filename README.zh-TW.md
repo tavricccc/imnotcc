@@ -73,7 +73,9 @@ CC_REMOTE_ORIGINS=https://cc.example.com npm start
 
 在 Windows 上可透過 Task Scheduler 於登入時自動在背景啟動，不會跳出終端機視窗：
 
-1. 將 [scripts/run.example.cmd](scripts/run.example.cmd) 複製到 `%LOCALAPPDATA%\cc-remote\run.cmd`，並修改裡面的 `CC_REMOTE_ORIGINS`（以及專案目錄路徑）。
+1. 將 [scripts/run.example.cmd](scripts/run.example.cmd) 複製到 `%LOCALAPPDATA%\cc-remote\run.cmd`，再修改內容：
+   - **必改：** 把 `cd /d "C:\path\to\cc-remote"` 改成你 clone `cc-remote` 的資料夾。複製後腳本已不在專案內，若用 `%~dp0..` 這類相對路徑會指到 `%LOCALAPPDATA%`，`node server\index.js` 就會啟動失敗。
+   - 修改 `CC_REMOTE_ORIGINS`。
 2. 在 PowerShell 註冊排程工作：
 
 ```powershell
@@ -112,7 +114,7 @@ Start-ScheduledTask -TaskName 'cc-remote'
 | `CC_REMOTE_DATA_DIR` | `data/`（開發模式 `data/dev/`） | 存放 `state.json` 與初始 `password.txt` 的目錄。 |
 | `CC_REMOTE_PASSWORD` | 首次啟動隨機產生 | 尚未建立帳號紀錄時的初始登入密碼。 |
 | `CC_REMOTE_WSL_DISTRO` | `Ubuntu` | Windows 上路徑為 `/` 開頭時使用的 WSL 發行版名稱。 |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | 讀取 `settings.json` 與對話紀錄的 Claude Code 設定目錄。 |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | **Windows** session 讀取 `settings.json` 與對話紀錄的 Claude Code 設定目錄。**WSL** session 不使用此變數，而是使用 WSL 內的 `~/.claude`（經由 `//wsl.localhost/<distro>` 讀取）。 |
 
 ## 開發與測試
 

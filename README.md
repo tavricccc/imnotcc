@@ -75,7 +75,9 @@ Because `cc-remote` can execute commands on your machine, put an identity layer 
 
 On Windows, you can run `cc-remote` automatically at sign-in without a visible console window:
 
-1. Copy [scripts/run.example.cmd](scripts/run.example.cmd) to `%LOCALAPPDATA%\cc-remote\run.cmd` and update `CC_REMOTE_ORIGINS` (and the `cd` path if needed).
+1. Copy [scripts/run.example.cmd](scripts/run.example.cmd) to `%LOCALAPPDATA%\cc-remote\run.cmd` then edit it:
+   - **Required:** change the `cd /d "C:\path\to\cc-remote"` line to the folder where you cloned `cc-remote`. Once copied, the script no longer sits inside the project, so a relative path such as `%~dp0..` would point at `%LOCALAPPDATA%` and `node server\index.js` would fail to start.
+   - Update `CC_REMOTE_ORIGINS`.
 2. Register the scheduled task in PowerShell:
 
 ```powershell
@@ -114,7 +116,7 @@ Start-ScheduledTask -TaskName 'cc-remote'
 | `CC_REMOTE_DATA_DIR` | `data/` (`data/dev/` in dev) | Directory for `state.json` and initial `password.txt`. |
 | `CC_REMOTE_PASSWORD` | Random on first run | Initial login password when `state.json` has no auth record yet. |
 | `CC_REMOTE_WSL_DISTRO` | `Ubuntu` | WSL distribution used when a session folder starts with `/`. |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code config directory read for `settings.json` and transcripts. |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code config directory read for `settings.json` and transcripts of **Windows** sessions. **WSL** sessions ignore it and use WSL's own `~/.claude` (read through `//wsl.localhost/<distro>`). |
 
 ## Development & Testing
 
