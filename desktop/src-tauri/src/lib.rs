@@ -111,9 +111,12 @@ const TITLEBAR_SCRIPT: &str = r#"
 (() => {
   if (window.__ccrTitlebarInit) return;
   window.__ccrTitlebarInit = true;
-  document.documentElement.style.setProperty("--safe-top", "36px");
+  // The cc-remote web app draws its own titlebar and opts out with this meta tag; other pages
+  // (setup page, a Cloudflare Access login) get this one.
   const mount = () => {
+    if (document.querySelector('meta[name="ccr-titlebar"]')) return;
     if (document.getElementById("ccr-titlebar") || !document.body) return;
+    document.documentElement.style.setProperty("--safe-top", "36px");
     const style = document.createElement("style");
     style.textContent = `
       #ccr-titlebar {

@@ -18,10 +18,9 @@ export function Titlebar() {
 
   React.useLayoutEffect(() => {
     if (!active) return;
+    // Not undone on unmount: the app swaps between login and main views, each with its own titlebar,
+    // and the window stays frameless either way.
     document.documentElement.style.setProperty("--safe-top", "36px");
-    return () => {
-      document.documentElement.style.removeProperty("--safe-top");
-    };
   }, [active]);
 
   if (!active) return null;
