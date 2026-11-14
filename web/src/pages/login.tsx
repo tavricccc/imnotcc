@@ -1,0 +1,54 @@
+import * as React from "react";
+import { auth, post } from "@/lib/api";
+import { Button } from "@/ui/button";
+import { Field, Input } from "@/ui/field";
+import { Panel } from "@/ui/panel";
+
+export function LoginPage() {
+  const [password, setPassword] = React.useState("");
+  const [error, setError] = React.useState<string>();
+  const [busy, setBusy] = React.useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(undefined);
+    try {
+      await post("/api/login", { password });
+      auth.set({ authed: true });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <main className="grid min-h-svh place-items-center px-[var(--gutter)] py-10">
+      <form className="content-in grid w-full max-w-sm justify-items-center gap-6" onSubmit={submit}>
+        <img alt="" className="size-20 rounded-[22.37%] shadow-float" src="/icon.svg" />
+        <div className="grid gap-1 text-center">
+          <h1 className="text-2xl font-bold tracking-tight">cc-remote</h1>
+          <p className="text-[0.9375rem] text-ink-muted">用手機操作這台電腦上的 Claude Code</p>
+        </div>
+        <Panel className="grid w-full gap-4">
+          <Field error={error} label="密碼">
+            {({ describedBy, id, invalid }) => (
+              <Input
+                aria-describedby={describedBy}
+                aria-invalid={invalid || undefined}
+                autoComplete="current-password"
+                autoFocus
+                id={id}
+                onChange={(e) => setPassword(e.target.value)}
+                type="password"
+                value={password}
+              />
+            )}
+          </Field>
+          <Button disabled={!password} size="lg" status={busy ? "loading" : "idle"} type="submit" variant="primary">登入</Button>
+        </Panel>
+      </form>
+    </main>
+  );
+}
