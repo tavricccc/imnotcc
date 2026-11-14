@@ -194,13 +194,14 @@ try {
   // A stopped turn hands held prompts back instead of sending them.
   events.length = 0;
   sendWs({ t: 'send', uuid: crypto.randomUUID(), text: 'Use Bash to run: sleep 30 . Then reply only SLEPT.' });
-  await wait((e) => e.kind === 'status' && e.status === 'running');
+  // Queue and stop only once the sleep is under way, so the turn cannot end first on its own.
+  await wait((e) => e.kind === 'sdk' && e.msg.type === 'assistant' && e.msg.message.content.some((c) => c.type === 'tool_use'));
   const held2 = crypto.randomUUID();
   sendWs({ t: 'send', uuid: held2, queue: true, text: 'Reply only SHOULD-NOT-RUN.' });
   await wait((e) => e.kind === 'queued' && e.queued.length === 1);
-  await new Promise((r) => setTimeout(r, 3000));
   sendWs({ t: 'interrupt' });
   const back = await wait((e) => e.kind === 'queue-returned', 60_000).catch(() => null);
+  if (!back) console.log('  after interrupt:', JSON.stringify(events.map((e) => e.kind === 'sdk' ? 'sdk:' + e.msg.type + ':' + (e.msg.subtype ?? '') : e.kind + (e.status ? ':' + e.status : '') + (e.uuid ? ':' + e.uuid.slice(0, 4) : ''))));
   check('interrupt returns held prompts', back?.items?.[0]?.uuid === held2 && back.items[0].text === 'Reply only SHOULD-NOT-RUN.');
   await new Promise((r) => setTimeout(r, 3000));
   check('returned prompt was not sent', !events.some((e) => e.kind === 'dequeued'));
