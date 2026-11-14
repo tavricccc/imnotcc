@@ -35,7 +35,6 @@ async function notify(payload) {
 }
 
 const clip = (text, n = 140) => { const t = String(text ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
-const where = (id) => { const cwd = store.get().sessions[id]?.cwd; return cwd ? path.basename(cwd.replace(/[\/]+$/, '')) : 'cc-remote'; };
 
 function onRunnerEvent(id, event) {
   if (!id) return;
@@ -43,13 +42,13 @@ function onRunnerEvent(id, event) {
   if (event.kind === 'permission') {
     const question = event.tool === 'AskUserQuestion';
     const q = question ? event.input?.questions?.[0]?.question : null;
-    void notify({ ...base, urgency: 'high', title: `${where(id)} · ${question ? 'Claude 在問你' : '需要你的確認'}`, body: clip(q || `要使用 ${event.tool}`) });
+    void notify({ ...base, urgency: 'high', title: question ? 'Claude 在問你' : '需要你的確認', body: clip(q || `要使用 ${event.tool}`) });
   } else if (event.kind === 'sdk' && event.msg?.type === 'result') {
     const m = event.msg;
     const failed = m.subtype !== 'success' || m.is_error;
-    void notify({ ...base, title: `${where(id)} · ${failed ? '發生錯誤' : '回合完成'}`, body: clip(failed ? (m.errors?.join(' ') || m.result || m.subtype) : m.result) || '已完成' });
+    void notify({ ...base, title: failed ? '發生錯誤' : '回合完成', body: clip(failed ? (m.errors?.join(' ') || m.result || m.subtype) : m.result) || '已完成' });
   } else if (event.kind === 'error') {
-    void notify({ ...base, title: `${where(id)} · 發生錯誤`, body: clip(event.message) });
+    void notify({ ...base, title: '發生錯誤', body: clip(event.message) });
   }
 }
 
@@ -72,5 +71,5 @@ export function pushRoutes(app) {
     store.save();
     res.json({ ok: true });
   });
-  app.post('/api/push/test', (_req, res) => { void notify({ title: 'cc-remote', body: '通知已開啟', url: '/', tag: 'test' }); res.json({ ok: true }); });
+  app.post('/api/push/test', (_req, res) => { void notify({ title: '測試通知', body: '通知已開啟', url: '/', tag: 'test' }); res.json({ ok: true }); });
 }
