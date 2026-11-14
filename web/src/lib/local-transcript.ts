@@ -38,6 +38,23 @@ async function openArchive(): Promise<IDBDatabase> {
   return db;
 }
 
+const CLIP = 50;
+const clip = (v: unknown) => (typeof v === "string" && v.length > CLIP ? v.slice(0, CLIP) : v);
+
+/** What the archive keeps of a row: which tool ran and the first 50 characters of its string inputs. No tool output, no images. */
+export function slimItem(item: Item): Item {
+  if (item.type === "tool") {
+    const input = Object.fromEntries(Object.entries(item.input ?? {}).filter(([, v]) => typeof v === "string").map(([k, v]) => [k, clip(v)]));
+    const { images: _images, image: _image, ...rest } = item;
+    return { ...rest, input, result: item.done ? "" : null };
+  }
+  if (item.image || item.images) {
+    const { images: _images, image: _image, ...rest } = item;
+    return { ...rest, text: rest.text ?? "[圖片]" };
+  }
+  return item;
+}
+
 /** Reconcile the shared rows, retaining history that compact or pagination omitted. */
 export function mergeTranscript(older: Item[], incoming: Item[], prepend = false): Item[] {
   const known = new Map(older.map((item, index) => [item.key, index]));
@@ -124,10 +141,72 @@ export async function removeLocalTranscripts(ids: string[]) {
   }
 }
 
+export interface ArchiveStats { bytes: number; sessions: { id: string; bytes: number; lastAt: number }[] }
+
+/** Roughly how much the archive holds (JSON length), per session, with when each last had activity. */
+export async function localArchiveStats(): Promise<ArchiveStats> {
+  const db = await openArchive();
+  try {
+    return await new Promise((resolve, reject) => {
+      const sessions: ArchiveStats["sessions"] = [];
+      const cursor = db.transaction("sessions").objectStore("sessions").openCursor();
+      cursor.onsuccess = () => {
+        const c = cursor.result;
+        if (!c) return resolve({ bytes: sessions.reduce((n, x) => n + x.bytes, 0), sessions });
+        const items = c.value as Item[];
+        const lastAt = items.reduce((m, i) => Math.max(m, i.endAt ?? i.at ?? 0), 0);
+        sessions.push({ id: String(c.key), bytes: JSON.stringify(items).length, lastAt });
+        c.continue();
+      };
+      cursor.onerror = () => reject(cursor.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export async function clearLocalTranscripts() {
+  const db = await openArchive();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("sessions", "readwrite");
+      tx.objectStore("sessions").clear();
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+/** Rewrite every stored session in the slim form (older archives kept tool output and images). */
+export async function slimLocalTranscripts() {
+  const db = await openArchive();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("sessions", "readwrite");
+      const store = tx.objectStore("sessions");
+      const cursor = store.openCursor();
+      cursor.onsuccess = () => {
+        const c = cursor.result;
+        if (!c) return;
+        c.update((c.value as Item[]).map(slimItem));
+        c.continue();
+      };
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
+}
+
+export const ARCHIVE_WARN_BYTES = 30 * 1024 * 1024;
+
 export const removeLocalTranscript = (id: string) => removeLocalTranscripts([id]);
 
 export function saveLocalTranscript(id: string, items: Item[]) {
   if (!items.length) return Promise.resolve();
   const snapshot = structuredClone(items);
-  return accessArchive(id, (previous, store) => { store.put(mergeTranscript(previous, snapshot), id); });
+  return accessArchive(id, (previous, store) => { store.put(mergeTranscript(previous, snapshot).map(slimItem), id); });
 }

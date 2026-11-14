@@ -5,7 +5,7 @@ import { auth, post } from "@/lib/api";
 import { claudeAuth, refreshClaudeAuth, TARGET_LABEL, type ClaudeTarget } from "@/lib/claude-auth";
 import { ClaudeLoginSheet } from "@/components/claude-login";
 import { clearCache } from "@/lib/cache";
-import { removeLocalTranscripts } from "@/lib/local-transcript";
+import { clearLocalTranscripts, localArchiveStats, removeLocalTranscripts } from "@/lib/local-transcript";
 import { prefs, SESSION_LIMITS } from "@/lib/prefs";
 import { disablePush, enablePush, push, refreshPush, testPush, type PushState } from "@/lib/push";
 import { readSessions } from "@/lib/resources";
@@ -45,6 +45,66 @@ function NotificationSettings() {
       <SwitchRow checked={state === "on"} detail={PUSH_DETAIL[state]} disabled={busy || (state !== "on" && state !== "off")} label="推播通知" onChange={(on) => void toggle(on)} />
       {state === "on" ? <ListRow label="傳送測試通知" onClick={() => void testPush().catch((e) => toast.error((e as Error).message))} /> : null}
     </ListGroup>
+  );
+}
+
+const mbText = (bytes: number) => (bytes < 1048576 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1048576).toFixed(1)} MB`);
+type StorageAction = "all" | "old" | "swcache" | "drafts";
+
+/** What this device keeps for the app, and ways to empty each part. Server data is never touched. */
+function LocalStorageSettings() {
+  const [stats, setStats] = React.useState<{ bytes: number; count: number; old: string[] } | null>(null);
+  const [action, setAction] = React.useState<StorageAction | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const refresh = React.useCallback(async () => {
+    try {
+      const s = await localArchiveStats();
+      const cutoff = Date.now() - 30 * 86400_000;
+      setStats({ bytes: s.bytes, count: s.sessions.length, old: s.sessions.filter((x) => x.lastAt && x.lastAt < cutoff).map((x) => x.id) });
+    } catch { setStats(null); }
+  }, []);
+  React.useEffect(() => { void refresh(); }, [refresh]);
+
+  const draftKeys = () => Object.keys(localStorage).filter((k) => k.startsWith("imnotcc:composer:"));
+  async function run() {
+    if (!action) return;
+    setBusy(true);
+    try {
+      if (action === "all") { await clearLocalTranscripts(); clearCache("/api/sessions"); }
+      else if (action === "old") { await removeLocalTranscripts(stats?.old ?? []); }
+      else if (action === "swcache") { await Promise.all((await caches.keys()).map((k) => caches.delete(k))); }
+      else draftKeys().forEach((k) => localStorage.removeItem(k));
+      toast.success("已清理");
+      setAction(null);
+      await refresh();
+    } catch { toast.error("清理失敗，請再試一次。"); } finally { setBusy(false); }
+  }
+  const text: Record<StorageAction, { title: string; description: string }> = {
+    all: { title: "清除全部對話快取？", description: "這個裝置上的所有本機對話快取會刪掉，再打開對話時從伺服器重新載入。" },
+    old: { title: "清除 30 天前的對話快取？", description: `會刪掉 ${stats?.old.length ?? 0} 個 30 天沒有動靜的對話的本機快取。` },
+    swcache: { title: "清除離線檔案快取？", description: "App 的離線頁面與靜態檔，下次連線會自動重新下載。" },
+    drafts: { title: "清除輸入草稿？", description: "各對話還沒送出的輸入文字會刪掉。" },
+  };
+  return (
+    <>
+      <ListGroup footer="只影響這個裝置。伺服器上的對話與記錄不會動。對話快取只存工具名稱與前 50 字，不含工具輸出與圖片；超過 30 MB 時啟動會提醒。" title="本機儲存空間">
+        <ListRow detail={stats ? `${stats.count} 個對話` : undefined} label="對話快取用量" value={stats ? mbText(stats.bytes) : "計算中"} />
+        <ListRow disabled={!stats?.old.length} icon={<Trash />} label="清除 30 天前的對話快取" onClick={() => setAction("old")} />
+        <ListRow disabled={!stats?.count} icon={<Trash />} label="清除全部對話快取" onClick={() => setAction("all")} />
+        <ListRow icon={<Trash />} label="清除離線檔案快取" onClick={() => setAction("swcache")} />
+        <ListRow icon={<Trash />} label="清除輸入草稿" onClick={() => setAction("drafts")} />
+      </ListGroup>
+      <ConfirmDialog
+        confirmLabel="清除"
+        description={action ? text[action].description : ""}
+        onConfirm={() => void run()}
+        onOpenChange={(o) => { if (!o) setAction(null); }}
+        open={action !== null}
+        status={busy ? "loading" : "idle"}
+        title={action ? text[action].title : ""}
+        tone="danger"
+      />
+    </>
   );
 }
 
@@ -404,6 +464,8 @@ export function AppSettingsPage() {
       <NotificationSettings />
 
       <ProjectSessionsSettings limit={view.projectSessionLimit} />
+
+      <LocalStorageSettings />
 
       {isTauri() ? <DesktopSettings /> : null}
 

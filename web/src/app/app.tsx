@@ -1,5 +1,7 @@
 import * as React from "react";
 import { auth, get } from "@/lib/api";
+import { ARCHIVE_WARN_BYTES, localArchiveStats, slimLocalTranscripts } from "@/lib/local-transcript";
+import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { navigate, usePath } from "@/lib/app-navigation";
 import { prefs } from "@/lib/prefs";
 import { start } from "@/lib/socket";
@@ -36,6 +38,31 @@ function ScreenView({ screen }: { screen: Screen }) {
     case "app-settings": return <AppSettingsPage />;
     default: return <SessionsPage />;
   }
+}
+
+/** On launch: slim what older versions stored, then say so when the archive is still over the limit. */
+function StorageWatcher() {
+  const [mb, setMb] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    void (async () => {
+      try {
+        await slimLocalTranscripts();
+        const { bytes } = await localArchiveStats();
+        if (bytes > ARCHIVE_WARN_BYTES) setMb(Math.round(bytes / 1048576));
+      } catch { /* storage blocked */ }
+    })();
+  }, []);
+  return (
+    <ConfirmDialog
+      cancelLabel="稍後再說"
+      confirmLabel="前往清理"
+      description={`這個裝置存了約 ${mb} MB 的對話快取，超過 30 MB。到 App 設定可以清掉舊的或全部。伺服器上的對話不受影響。`}
+      onConfirm={() => navigate("/app")}
+      onOpenChange={(o) => { if (!o) setMb(null); }}
+      open={mb !== null}
+      title="本機快取太大了"
+    />
+  );
 }
 
 export function App() {
@@ -77,6 +104,7 @@ export function App() {
     <>
       <Titlebar />
       <ClaudeLoginWatcher />
+      <StorageWatcher />
       <AppShell active={route.tab} bare={!!sessionId || showDraft} dock={route.depth === 0} sessions={desktopSessions ? {
         collapsed: sessionSidebarCollapsed,
         content: <SessionsPage activeId={sessionId} revision={sessionRevision} sidebar />,
