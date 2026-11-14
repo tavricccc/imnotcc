@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Field, Input } from "@/ui/field";
 import { ListGroup, ListRow } from "@/ui/list";
 import { ChoiceRow, NumberRow, PickerRow } from "@/ui/list-controls";
-import { readCompactWindows, type ClaudeEnv, useFolders, useSettings, type Settings } from "@/lib/resources";
+import { readCompactWindows, type ClaudeEnv, useCompactWindows, useFolders, useSettings, type Settings } from "@/lib/resources";
 import { ErrorState, LoadingList, PageHeader } from "@/ui/page";
 import { Sheet } from "@/ui/sheet";
 
