@@ -478,7 +478,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
           </main>
       </div>
       <EdgeBlur className="chat-edge-blur absolute h-[calc(var(--chat-composer-height,0px)+1.25rem)]" side="bottom" />
-      <div className="pointer-events-none relative z-30 mt-auto shrink-0 px-[var(--gutter)] pb-[max(0.75rem,var(--safe-bottom))] md:px-8 md:pb-5 [&>div]:pointer-events-auto [&>form>div]:pointer-events-auto" ref={composer}>
+      <div className="pointer-events-none relative z-30 mt-auto shrink-0 px-[var(--gutter)] pb-[max(0.75rem,var(--safe-bottom))] md:px-8 md:pb-5 [[data-keyboard]_&]:pb-2 [&>div]:pointer-events-auto [&>form>div]:pointer-events-auto" ref={composer}>
       {question ? (
         <div className="mx-auto max-w-3xl">
           <PermissionCard className="max-h-[calc(var(--visual-height,100dvh)*0.65)] overflow-y-auto bg-surface-solid shadow-float" key={question.id} onAnswer={(a) => answer(question, a)} req={question} />

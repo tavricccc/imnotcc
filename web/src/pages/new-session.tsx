@@ -17,6 +17,7 @@ import { ChoiceRow } from "@/ui/list-controls";
 import { LoadingList } from "@/ui/page";
 import { Sheet } from "@/ui/sheet";
 import { useVisualViewport } from "@/ui/use-visual-viewport";
+import { cn } from "@/lib/utils";
 import { useCompactViewport } from "@/ui/use-compact-viewport";
 import { ENV_LABEL, envOf, folderUrl, FolderBrowserSheet, readFolder, type Env } from "./sessions";
 
@@ -114,8 +115,10 @@ export function NewSessionPage({ cwd, environment, onStarted }: {
     return <Sheet onOpenChange={(open) => setPanel(open ? name : null)} open={panel === name} title={title} trigger={trigger}>{content}</Sheet>;
   }
 
+  // On a phone the page is pinned like the chat, so the keyboard moves both composers the same way.
   return (
-    <main className="relative top-[var(--visual-top,0px)] mx-auto flex h-[var(--visual-height,100dvh)] min-h-0 max-w-3xl flex-col px-[var(--gutter)] pt-[var(--safe-top)] md:px-8" ref={page}>
+    <main className={cn("mx-auto flex min-h-0 max-w-3xl flex-col px-[var(--gutter)] pt-[var(--safe-top)] md:px-8",
+      compact ? "fixed inset-x-0 top-[var(--visual-top,0px)] h-[var(--visual-height,100dvh)]" : "relative h-dvh")} ref={page}>
       {compact ? (
         <header className="flex shrink-0 items-center gap-2 pt-2">
           <Button aria-label="返回 Session 清單" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
@@ -126,7 +129,7 @@ export function NewSessionPage({ cwd, environment, onStarted }: {
         <img alt="" className="size-10 rounded-icon md:size-12" src="/icon.svg" />
         <h1 className="text-xl font-semibold md:text-3xl">想讓 Claude 做什麼？</h1>
       </div>
-      <form className="relative pb-[max(0.75rem,var(--safe-bottom))] md:pb-5" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
+      <form className="relative pb-[max(0.75rem,var(--safe-bottom))] md:pb-5 [[data-keyboard]_&]:pb-2" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         <div className="mx-3 flex min-w-0 items-center gap-1 rounded-t-panel bg-surface-raised px-2 pb-1 pt-1.5 md:mx-4">
           {setting("environment", "執行環境",
             <SettingButton aria-label={`執行環境：${ENV_LABEL[env]}`} disabled={locked}>{env === "win" ? <WindowsLogo /> : <LinuxLogo />}{ENV_LABEL[env]}</SettingButton>,
