@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cc-remote</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f6f5f2; --card: #fff; --fg: #1d1c1a; --muted: #6b6862; --line: #e2dfd8; --accent: #c96442; --bad: #b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1b1a18; --card: #242320; --fg: #ecebe7; --muted: #a19e96; --line: #36342f; --accent: #e0805e; --bad: #f2b8b5; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.55 "Segoe UI", "Microsoft JhengHei UI", system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 560px; margin: 0 auto; padding: 48px 24px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  h2 { font-size: 16px; margin: 0 0 6px; }
+  p { margin: 0 0 12px; color: var(--muted); }
+  input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
+  button { margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  .err { color: var(--bad); margin-top: 10px; white-space: pre-wrap; }
+  .err:empty { display: none; }
+  pre { max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; margin: 12px 0 0; }
+  .pw { font: 600 20px Consolas, monospace; letter-spacing: .04em; user-select: all; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>cc-remote</h1>
+  <p class="sub">連到一台跑 cc-remote 的電腦，或把這台電腦設成 server。</p>
+
+  <div id="choose">
+    <section>
+      <h2>連到現有的 server</h2>
+      <p>例如 https://cc.example.com。</p>
+      <form id="remote-form">
+        <input id="url" type="url" placeholder="https://" required autocomplete="url">
+        <button id="remote-btn" type="submit">連線</button>
+      </form>
+      <div class="err" id="remote-err"></div>
+    </section>
+
+    <section>
+      <h2>把這台電腦設成 server</h2>
+      <p>用這台電腦上的 Node.js 跑 cc-remote 和 Claude Code。關掉視窗後 server 會留在系統匣繼續跑。需要先登入過 Claude Code。</p>
+      <div id="node-missing" hidden>
+        <div class="err" id="node-err"></div>
+        <button class="ghost" id="node-dl" type="button">下載 Node.js</button>
+        <button class="ghost" id="node-recheck" type="button">我裝好了，重新檢查</button>
+      </div>
+      <button id="local-btn" type="button">設成 server</button>
+    </section>
+  </div>
+
+  <section id="installing" hidden>
+    <h2 id="inst-title">正在安裝本機 server…</h2>
+    <p>會從 npm 下載 Claude Agent SDK 等套件，約 400 MB。</p>
+    <pre id="log"></pre>
+    <div class="err" id="inst-err"></div>
+    <div id="inst-fail" hidden>
+      <button id="retry" type="button">重試</button>
+      <button class="ghost" id="back" type="button">返回</button>
+    </div>
+  </section>
+
+  <section id="done" hidden>
+    <h2>本機 server 已經在跑了</h2>
+    <p>登入用的密碼（之後可以從系統匣「顯示本機 server 密碼」再看）：</p>
+    <div class="pw" id="pw"></div>
+    <p style="margin-top:12px">要從手機連，需要另外設定通道（例如 Cloudflare Tunnel）指到 <span id="local-url"></span>。</p>
+    <button id="open-local" type="button">開啟</button>
+  </section>
+</main>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { listen } = window.__TAURI__.event;
+  const $ = (id) => document.getElementById(id);
+  const show = (id) => { for (const s of ["choose", "installing", "done"]) $(s).hidden = s !== id; };
+  let doneUrl = null;
+
+  async function refresh() {
+    const st = await invoke("get_state");
+    $("local-url").textContent = st.local_url;
+    if (st.config.url && !st.config.local) $("url").value = st.config.url;
+    const nodeOk = "Ok" in st.node;
+    $("node-missing").hidden = nodeOk;
+    $("local-btn").disabled = !nodeOk;
+    if (!nodeOk) $("node-err").textContent = st.node.Err + "。請先安裝 Node.js 20 以上，裝好後重新檢查。";
+    return st;
+  }
+
+  $("remote-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("remote-err").textContent = "";
+    $("remote-btn").disabled = true;
+    try { await invoke("use_remote", { url: $("url").value }); }
+    catch (err) { $("remote-err").textContent = String(err); }
+    finally { $("remote-btn").disabled = false; }
+  });
+
+  function install(update) {
+    $("inst-title").textContent = update ? "cc-remote 更新了，正在更新本機 server…" : "正在安裝本機 server…";
+    $("log").textContent = "";
+    $("inst-err").textContent = "";
+    $("inst-fail").hidden = true;
+    show("installing");
+    invoke("install_local").catch((err) => { $("inst-err").textContent = String(err); $("inst-fail").hidden = false; });
+  }
+
+  listen("install-log", (e) => { const l = $("log"); l.textContent += e.payload + "\n"; l.scrollTop = l.scrollHeight; });
+  listen("install-done", (e) => {
+    const d = e.payload;
+    if (d.ok) {
+      doneUrl = d.url;
+      $("pw").textContent = d.password ?? "（找不到密碼檔，請看系統匣「顯示本機 server 密碼」）";
+      show("done");
+    } else {
+      $("inst-err").textContent = d.error + "\n完整紀錄：" + d.log;
+      $("inst-fail").hidden = false;
+    }
+  });
+
+  $("local-btn").addEventListener("click", () => install(false));
+  $("retry").addEventListener("click", () => install(false));
+  $("back").addEventListener("click", () => show("choose"));
+  $("open-local").addEventListener("click", () => invoke("open_url", { url: doneUrl }));
+  $("node-dl").addEventListener("click", () => invoke("open_node_download"));
+  $("node-recheck").addEventListener("click", refresh);
+
+  refresh().then((st) => { if (st.needs_update) install(true); });
+</script>
+</body>
+</html>
