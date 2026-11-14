@@ -13,6 +13,7 @@ fn main() {
                 "open_data_dir",
                 "open_log_dir",
                 "open_setup",
+                "open_external",
             ]),
         ),
     )

@@ -435,6 +435,19 @@ fn open_log_dir(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     std::process::Command::new("explorer").arg(local::log_dir(&app)).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Opens a Claude sign-in link in the system browser; any other address is refused.
+#[tauri::command]
+fn open_external(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
+    let u: tauri::Url = url.parse().map_err(|_| "網址格式不對".to_string())?;
+    let host = u.host_str().unwrap_or("");
+    let allowed = ["claude.com", "claude.ai", "platform.claude.com", "console.anthropic.com"];
+    if u.scheme() != "https" || !allowed.contains(&host) {
+        return Err("只能開啟 Claude 的登入頁面".into());
+    }
+    std::process::Command::new("explorer").arg(u.as_str()).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn open_setup(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     from_trusted_page(&app, &window)?;
@@ -499,7 +512,8 @@ pub fn run() {
             restart_local,
             open_data_dir,
             open_log_dir,
-            open_setup
+            open_setup,
+            open_external
         ])
         .setup(|app| {
             let handle = app.handle().clone();

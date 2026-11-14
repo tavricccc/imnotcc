@@ -4,6 +4,8 @@ import { navigate, usePath } from "@/lib/app-navigation";
 import { prefs } from "@/lib/prefs";
 import { start } from "@/lib/socket";
 import { startShared } from "@/lib/store";
+import { startClaudeAuth } from "@/lib/claude-auth";
+import { ClaudeLoginWatcher } from "@/components/claude-login";
 import { useStore } from "@/lib/store-core";
 import { Toaster } from "@/ui/feedback";
 import { Lightbox } from "@/components/lightbox";
@@ -55,7 +57,7 @@ export function App() {
     get("/api/me").then((r) => auth.set({ authed: r.authed, checked: true })).catch(() => auth.set({ authed: false, checked: true }));
   }, []);
   React.useEffect(() => {
-    if (authed) { start(); startShared(); }
+    if (authed) { start(); startShared(); startClaudeAuth(); }
   }, [authed]);
   // A new screen starts at its top; a step back to a list does too, which is what a phone does.
   React.useLayoutEffect(() => { window.scrollTo(0, 0); }, [path]);
@@ -73,6 +75,7 @@ export function App() {
   return (
     <>
       <Titlebar />
+      <ClaudeLoginWatcher />
       <AppShell active={route.tab} bare={!!sessionId || showDraft} dock={route.depth === 0} sessions={desktopSessions ? {
         collapsed: sessionSidebarCollapsed,
         content: <SessionsPage activeId={sessionId} revision={sessionRevision} sidebar />,

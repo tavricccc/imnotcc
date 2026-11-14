@@ -2,6 +2,8 @@ import * as React from "react";
 import { toast } from "sonner";
 import { ArrowsClockwise, Desktop, FolderOpen, Globe, Key, Laptop, Link, SignOut, Trash } from "@phosphor-icons/react/ssr";
 import { auth, post } from "@/lib/api";
+import { claudeAuth, refreshClaudeAuth, TARGET_LABEL, type ClaudeTarget } from "@/lib/claude-auth";
+import { ClaudeLoginSheet } from "@/components/claude-login";
 import { clearCache } from "@/lib/cache";
 import { removeLocalTranscripts } from "@/lib/local-transcript";
 import { prefs, SESSION_LIMITS } from "@/lib/prefs";
@@ -357,6 +359,28 @@ function DesktopSettings() {
   );
 }
 
+function ClaudeAccountSettings() {
+  const { status } = useStore(claudeAuth);
+  const [target, setTarget] = React.useState<ClaudeTarget>();
+  React.useEffect(() => { void refreshClaudeAuth(); }, []);
+  const targets = Object.keys(status) as ClaudeTarget[];
+  if (!targets.length) return null;
+  return (
+    <>
+      <ListGroup footer="Server 電腦上 Claude Code 的登入。Windows 和 WSL 的 session 各自登入。" title="Claude 帳號">
+        {targets.map((t) => {
+          const s = status[t]!;
+          const detail = s.loggedIn === null ? (s.error ?? "讀不到狀態")
+            : !s.loggedIn ? (s.expired ? "登入已失效" : "還沒登入")
+            : [s.email, s.authMethod].filter(Boolean).join(" · ") || "已登入";
+          return <ListRow detail={detail} icon={<Key />} key={t} label={`${TARGET_LABEL[t]}：${s.loggedIn ? "重新登入" : "登入"}`} onClick={() => setTarget(t)} />;
+        })}
+      </ListGroup>
+      {target ? <ClaudeLoginSheet onOpenChange={(o) => { if (!o) setTarget(undefined); }} open target={target} /> : null}
+    </>
+  );
+}
+
 export function AppSettingsPage() {
   const view = useStore(prefs);
   const [passwordOpen, setPasswordOpen] = React.useState(false);
@@ -371,6 +395,8 @@ export function AppSettingsPage() {
         <SwitchRow checked={view.bubbles} label="回覆用對話氣泡" onChange={(v) => prefs.set({ bubbles: v })} />
         <SwitchRow checked={view.hideWork} detail="只留你和 Claude 的對話，執行中會顯示正在用的工具" disabled={!view.bubbles} label="氣泡模式隱藏思考和工具" onChange={(v) => prefs.set({ hideWork: v })} />
       </ListGroup>
+
+      <ClaudeAccountSettings />
 
       <NotificationSettings />
 
