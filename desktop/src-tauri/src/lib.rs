@@ -12,6 +12,7 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
+use tauri_plugin_dialog::DialogExt;
 
 fn default_port() -> u16 {
     4280
@@ -414,14 +415,12 @@ fn set_autostart(app: AppHandle, window: WebviewWindow, enabled: bool) -> Result
 }
 
 #[tauri::command]
-fn restart_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+async fn restart_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     from_trusted_page(&app, &window)?;
-    let st = app.state::<AppState>();
-    if !st.config.lock().unwrap().local {
+    if !app.state::<AppState>().config.lock().unwrap().local {
         return Err("這台電腦目前沒有設成 server。".into());
     }
-    st.server.restart(&app);
-    Ok(())
+    tauri::async_runtime::spawn_blocking(move || app.state::<AppState>().server.restart(&app)).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -444,9 +443,12 @@ fn open_setup(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let open = MenuItem::with_id(app, "open", "開啟視窗", true, None::<&str>)?;
+    // Kept here as well as in App settings: when the server is down, that page cannot load.
+    let restart = MenuItem::with_id(app, "restart", "重新啟動本機 server", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "結束", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &sep, &quit])?;
+    let sep2 = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&open, &sep, &restart, &sep2, &quit])?;
 
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().unwrap().clone())
@@ -460,6 +462,16 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .on_menu_event(move |app, e| match e.id.as_ref() {
             "open" => show_window(app),
+            "restart" => {
+                let st = app.state::<AppState>();
+                if st.config.lock().unwrap().local {
+                    let app = app.clone();
+                    // Stopping waits on the old process; the tray handler runs on the main thread.
+                    std::thread::spawn(move || app.state::<AppState>().server.restart(&app));
+                } else {
+                    app.dialog().message("這台電腦沒有設成 server。").title("cc-remote").show(|_| {});
+                }
+            }
             "quit" => {
                 app.state::<AppState>().server.stop();
                 app.exit(0);
