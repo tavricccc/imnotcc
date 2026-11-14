@@ -38,6 +38,9 @@ export function spawnOptions(cwd) {
   };
 }
 
+// wsl.exe arguments that run the claude CLI inside WSL with `args`.
+export const cliArgs = (args) => ['-d', DISTRO, '-e', 'bash', '-lc', 'exec claude "$@"', 'claude', ...args];
+
 // The SDK's transcript readers find Claude Code's files through CLAUDE_CONFIG_DIR, which is one
 // value for the whole process, so every read goes through this queue with the right value set.
 let chain = Promise.resolve();

@@ -39,6 +39,8 @@ export function probeControls(cwd) {
 }
 export function onEvent(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 const emit = (id, event) => { for (const fn of listeners) fn(id, event); };
+/** Sends `event` to every open page. */
+export const broadcast = (event) => emit(null, event);
 
 export function runnerFor(id) {
   let r = runners.get(id);
