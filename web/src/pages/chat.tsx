@@ -360,10 +360,10 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const running = s.status === "running";
   // Bubble mode can hide thinking and tools. The composer's stop button already says a turn is running.
   const hideWork = view.bubbles && view.hideWork;
-  // Between steps (a tool done or a thought finished, the next not yet here) a shimmering 思考中
-  // fills the gap; a tool at work shimmers on its own line, or here when bubble mode hides it.
+  // While a turn runs, a shimmering line stays at the bottom the whole time, so the transcript
+  // does not jump as steps start and finish; it names the tool at work when bubble mode hides it.
   const busyTool = running ? t.items.findLast((it) => it.type === "tool" && !it.done) : undefined;
-  const status = !running || s.draft || s.pending.length ? null : !busyTool ? "思考中" : hideWork ? `正在使用 ${busyTool.name}` : null;
+  const status = !running ? null : busyTool && hideWork ? `正在使用 ${busyTool.name}` : "思考中";
   // A question waits at the bottom in place of the composer; other requests stay in the transcript.
   const question = s.pending.find((p) => p.tool === "AskUserQuestion");
   // The composer only rises back in after a question took its place, not on first load.
