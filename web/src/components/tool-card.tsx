@@ -1,6 +1,6 @@
 import * as React from "react";
 import { animate, useReducedMotion } from "motion/react";
-import { Brain, CaretRight, FilePlus, FileText, Globe, ListChecks, MagnifyingGlass, PencilSimple, PuzzlePiece, Question, Robot, TerminalWindow, Wrench, X } from "@phosphor-icons/react/ssr";
+import { Brain, CaretRight, FileText, Globe, ListChecks, MagnifyingGlass, PencilSimple, PuzzlePiece, Question, Robot, TerminalWindow, Wrench, X } from "@phosphor-icons/react/ssr";
 import { motionEasing, motionSeconds } from "@/generated/motion-tokens";
 import { toolSummary, type Item } from "@/lib/transcript";
 import { cn } from "@/lib/utils";
@@ -147,8 +147,7 @@ export function toolIcon(name?: string) {
   switch (name) {
     case "Bash": case "PowerShell": return TerminalWindow;
     case "Read": return FileText;
-    case "Write": return FilePlus;
-    case "Edit": case "MultiEdit": case "NotebookEdit": return PencilSimple;
+    case "Write": case "Edit": case "MultiEdit": case "NotebookEdit": return PencilSimple;
     case "Glob": case "Grep": return MagnifyingGlass;
     case "WebFetch": case "WebSearch": return Globe;
     case "Task": case "Agent": return Robot;
