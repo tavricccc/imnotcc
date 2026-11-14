@@ -3,8 +3,9 @@
 import * as React from "react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { ArrowSquareOut, DownloadSimple } from "@phosphor-icons/react/ssr";
-import { get } from "@/lib/api";
+import { toast } from "sonner";
+import { ArrowSquareOut, DownloadSimple, Globe } from "@phosphor-icons/react/ssr";
+import { get, post } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { looksLikePath, parseRef, type FileKind } from "@/lib/file-mentions";
 import { openPreview } from "@/lib/preview";
@@ -112,11 +113,15 @@ function MarkdownFile({ data, session }: { data: FileData; session: string }) {
   );
 }
 
-/** Opens the raw file in a new tab: for a PDF on a phone, or anything to save. */
-export function OpenRaw({ path, session }: { path: string; session: string }) {
+/** Images and PDFs open in a new tab (a PDF reads better there on a phone); anything else downloads. */
+export function OpenRaw({ kind, name, path, session }: { kind: FileKind; name: string; path: string; session: string }) {
+  const inline = kind === "image" || kind === "pdf";
+  const label = inline ? "在新分頁開啟" : "下載";
   return (
-    <Button asChild aria-label="在新分頁開啟" size="icon-sm" variant="ghost">
-      <a href={fileUrl(session, "raw", path)} rel="noopener noreferrer" target="_blank"><ArrowSquareOut /></a>
+    <Button asChild aria-label={label} size="icon-sm" title={label} variant="ghost">
+      {inline
+        ? <a href={fileUrl(session, "raw", path)} rel="noopener noreferrer" target="_blank"><ArrowSquareOut /></a>
+        : <a download={name} href={fileUrl(session, "raw", path)}><DownloadSimple /></a>}
     </Button>
   );
 }
@@ -135,4 +140,28 @@ export function useTokens(text: string, name: string) {
 
 export function Tokens({ line }: { line: ThemedToken[] }) {
   return <>{line.map((t, i) => <span key={i} style={t.htmlStyle as React.CSSProperties}>{t.content}</span>)}</>;
+}
+
+/**
+ * Opens a local HTML page in a new tab, sandboxed by the server. The tab is opened before the
+ * link is asked for, so the browser counts it as the tap's own and does not block it.
+ */
+export function OpenPage({ path, session }: { path: string; session: string }) {
+  const [busy, setBusy] = React.useState(false);
+  async function open() {
+    const tab = window.open("", "_blank");
+    setBusy(true);
+    try {
+      const { url } = await post<{ url: string }>(`/api/sessions/${encodeURIComponent(session)}/preview-link`, { path });
+      if (tab) { tab.opener = null; tab.location.href = url; } else window.location.assign(url);
+    } catch (e) {
+      tab?.close();
+      toast.error((e as Error).message);
+    } finally { setBusy(false); }
+  }
+  return (
+    <Button onClick={() => void open()} size="sm" status={busy ? "loading" : "idle"} variant="secondary">
+      <Globe />在新分頁開啟
+    </Button>
+  );
 }

@@ -5,6 +5,7 @@
 // from that environment's home, Linux paths in a WSL session through //wsl.localhost. Any file
 // on this computer can be opened; the login in front of the app is the boundary, the same as for
 // running Claude itself.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -75,6 +76,29 @@ function inspect(cwd, raw) {
   } catch { return null; }
 }
 
+// Preview links: token -> the folder it opens, until it has gone unused for a while.
+const GRANT_MS = 60 * 60 * 1000;
+const MAX_GRANTS = 200;
+const grants = new Map();
+// The page runs scripts but in an origin of its own, so it cannot reach this app or its login.
+const PREVIEW_HEADERS = {
+  'Content-Security-Policy': 'sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  // A sandboxed page's own origin is opaque: module scripts and fetches back to its folder need this.
+  'Access-Control-Allow-Origin': '*',
+  'Cache-Control': 'no-store',
+};
+
+function previewLink(file) {
+  const now = Date.now();
+  for (const [k, g] of grants) if (g.expires < now) grants.delete(k);
+  while (grants.size >= MAX_GRANTS) grants.delete(grants.keys().next().value);
+  const token = crypto.randomBytes(24).toString('base64url');
+  grants.set(token, { dir: path.dirname(file), expires: now + GRANT_MS });
+  return `/preview/${token}/${encodeURIComponent(path.basename(file))}`;
+}
+
 const describe = (f) => ({ path: f.shown, name: path.basename(f.real), kind: f.kind, size: f.stat.size, mtime: f.stat.mtimeMs });
 
 export function fileRoutes(app, { requireSession, wrap }) {
@@ -122,6 +146,29 @@ export function fileRoutes(app, { requireSession, wrap }) {
     if (!f) return res.status(404).json({ error: '找不到這張圖片。' });
     if (f.kind !== 'image') return res.status(403).json({ error: '不能開這個檔案。' });
     raw(req, res);
+  });
+
+  // A local HTML page, opened in a new tab. The link carries a token that lets that tab read the
+  // page's folder for a while; it needs no login, because a sandboxed page sends no cookies.
+  app.post('/api/sessions/:id/preview-link', (req, res) => {
+    const meta = requireSession(req, res);
+    if (!meta) return;
+    const f = inspect(meta.cwd, req.body?.path);
+    if (!f || f.kind !== 'html') return res.status(400).json({ error: '只能這樣開 HTML 檔。' });
+    res.json({ url: previewLink(f.real) });
+  });
+
+  app.get('/preview/:token/*rest', (req, res) => {
+    const grant = grants.get(req.params.token);
+    if (!grant || grant.expires < Date.now()) return res.status(404).type('text/plain').send('這個預覽連結已經過期，回到 cc-remote 再開一次。');
+    grant.expires = Date.now() + GRANT_MS;
+    const rel = [].concat(req.params.rest ?? []).join('/');
+    let real;
+    try { real = fs.realpathSync(path.resolve(grant.dir, rel)); } catch { return res.status(404).type('text/plain').send('找不到這個檔案。'); }
+    // Only inside the page's folder, symlinks included.
+    if (real !== grant.dir && !real.startsWith(grant.dir + path.sep)) return res.status(403).type('text/plain').send('不能開這個資料夾以外的檔案。');
+    if (!fs.statSync(real).isFile()) return res.status(404).type('text/plain').send('找不到這個檔案。');
+    res.sendFile(real, { dotfiles: 'allow', headers: PREVIEW_HEADERS });
   });
 
   // One file's change in one turn, as a unified diff between the turn's two snapshots.

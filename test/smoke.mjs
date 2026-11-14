@@ -75,7 +75,18 @@ try {
   const rawText = await fetch(`${BASE}/api/sessions/${id}/raw?path=notes.txt`, { headers: { cookie } });
   check('raw non-image is a download', rawText.status === 200 && rawText.headers.get('content-type') === 'application/octet-stream' && /attachment/.test(rawText.headers.get('content-disposition') ?? ''));
   check('raw needs login', (await fetch(`${BASE}/api/sessions/${id}/raw?path=notes.txt`)).status === 401);
-  // A git repository, so the next turns' changes are counted and diffable.
+  // A local HTML page opens in a new tab through a token, sandboxed, limited to its folder.
+  fs.mkdirSync(path.join(local, 'site'));
+  fs.writeFileSync(path.join(local, 'site', 'index.html'), '<script src="app.js"></script>');
+  fs.writeFileSync(path.join(local, 'site', 'app.js'), 'console.log(1)');
+  check('preview link only for html', (await api('POST', `/api/sessions/${id}/preview-link`, { path: 'notes.txt' })).status === 400);
+  const link = (await api('POST', `/api/sessions/${id}/preview-link`, { path: 'site/index.html' })).body?.url ?? '';
+  const page = await fetch(BASE + link);
+  check('preview page without login', page.status === 200 && /sandbox allow-scripts/.test(page.headers.get('content-security-policy') ?? '') && !/allow-same-origin/.test(page.headers.get('content-security-policy') ?? ''));
+  check('preview sibling asset', (await fetch(BASE + link.replace(/[^/]+$/, 'app.js'))).status === 200);
+  check('preview cannot leave its folder', [403, 404].includes((await fetch(BASE + link.replace(/[^/]+$/, '..%2fnotes.txt'))).status));
+  check('preview bad token', (await fetch(`${BASE}/preview/nope/index.html`)).status === 404);
+
   const gitArgs = (args) => (WSL ? ['wsl.exe', ['-d', DISTRO, '--cd', work, '-e', 'git', ...args]] : ['git', args, { cwd: work }]);
   for (const args of [['init', '-q'], ['add', '-A'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init']]) {
     const [file, argv, opts] = gitArgs(args);

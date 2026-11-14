@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { Sheet } from "@/ui/sheet";
 import { FileIcon } from "./file-icon";
-import { FileBody, OpenRaw, useFile } from "./preview-views";
+import { FileBody, OpenPage, OpenRaw, useFile } from "./preview-views";
 import { DiffBody } from "./diff-view";
 
 /** Wide enough for the panel beside the chat rather than over it. */
@@ -123,7 +123,8 @@ function Title({ file, source, target, toggleSource }: { file: FileState; source
           {source ? <Eye /> : <Code />}
         </Button>
       ) : null}
-      {target.kind === "file" && file.data && file.data.kind !== "dir" ? <OpenRaw path={target.path} session={target.session} /> : null}
+      {target.kind === "file" && file.data?.kind === "html" ? <OpenPage path={target.path} session={target.session} />
+        : target.kind === "file" && file.data && file.data.kind !== "dir" ? <OpenRaw kind={file.data.kind} name={file.data.name} path={target.path} session={target.session} /> : null}
     </div>
   );
 }
