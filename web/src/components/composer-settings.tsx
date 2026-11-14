@@ -59,6 +59,16 @@ function arrangeModels(models: Model[], current: string): { main: ModelOption[];
   return { main, more };
 }
 
+/** A face for each level, so the choice reads as a feeling rather than a word. */
+const EFFORT_MOOD: Record<string, { icon: string; text: string }> = {
+  "": { icon: "✨", text: "交給 Claude 決定" },
+  low: { icon: "⚡", text: "快速回答，不多想" },
+  medium: { icon: "🙂", text: "剛剛好" },
+  high: { icon: "🧠", text: "認真想一想" },
+  xhigh: { icon: "🔥", text: "全力以赴" },
+  max: { icon: "🚀", text: "火力全開，慢一點也值得" },
+};
+
 /** Effort as a slider over what this model offers, "預設" first. Commits when the thumb is let go. */
 function EffortSlider({ disabled, effort, levels, onEffort }: { disabled?: boolean; effort: string; levels: string[]; onEffort: (effort: string) => void }) {
   const steps = ["", ...levels];
@@ -69,28 +79,37 @@ function EffortSlider({ disabled, effort, levels, onEffort }: { disabled?: boole
   React.useEffect(() => { setDraft(index); sent.current = effort; }, [index, effort]);
   const commit = () => { if (steps[draft] !== sent.current) { sent.current = steps[draft]; onEffort(steps[draft]); } };
   const label = (v: string) => EFFORTS.find((e) => e.value === v)?.label ?? v;
+  const mood = EFFORT_MOOD[steps[draft]] ?? { icon: "", text: label(steps[draft]) };
+  const pct = steps.length > 1 ? (draft / (steps.length - 1)) * 100 : 0;
   return (
-    <div className="grid gap-2 px-1">
-      <div className="flex items-baseline justify-between">
+    <div className="grid gap-1.5 px-1">
+      <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">Effort</span>
-        <span className="text-sm tabular-nums text-ink-muted">{label(steps[draft])}</span>
+        <span aria-live="polite" className="effort-pop flex items-center gap-1.5 text-sm" key={draft}>
+          <span aria-hidden className="text-base leading-none">{mood.icon}</span>
+          <span className="font-semibold text-contrast">{label(steps[draft])}</span>
+          <span className="text-ink-muted">· {mood.text}</span>
+        </span>
       </div>
       <input
         aria-label="Effort"
-        aria-valuetext={label(steps[draft])}
-        className="w-full accent-accent disabled:opacity-50"
+        aria-valuetext={`${label(steps[draft])}，${mood.text}`}
+        className="effort-range"
         disabled={disabled}
         max={steps.length - 1}
         min={0}
         onBlur={commit}
-        onChange={(e) => setDraft(Number(e.target.value))}
+        onChange={(e) => { setDraft(Number(e.target.value)); navigator.vibrate?.(5); }}
         onKeyUp={(e) => { if (e.key === "Enter") commit(); }}
         onPointerUp={commit}
         step={1}
+        style={{ "--pct": pct } as React.CSSProperties}
         type="range"
         value={draft}
       />
-      <div aria-hidden className="flex justify-between text-[0.6875rem] text-ink-faint">{steps.map((s) => <span key={s || "default"}>{label(s)}</span>)}</div>
+      <div aria-hidden className="flex justify-between text-[0.6875rem] text-ink-faint">
+        {steps.map((s, i) => <button className={cn("rounded px-0.5 transition-colors", i === draft && "font-semibold text-contrast")} disabled={disabled} key={s || "default"} onClick={() => { setDraft(i); if (sent.current !== s) { sent.current = s; onEffort(s); } }} tabIndex={-1} type="button">{label(s)}</button>)}
+      </div>
     </div>
   );
 }
@@ -111,7 +130,7 @@ export function ComposerSettings({ disabled, effort, effortLocked, mode, model, 
   const { main, more } = React.useMemo(() => arrangeModels(controls?.models ?? [], model), [controls, model]);
   const chosen = [...main, ...more].find((m) => m.value === model) ?? main[0];
   const [showMore, setShowMore] = React.useState(false);
-  React.useEffect(() => { if (panel === "model") setShowMore(more.some((m) => m.value === model)); }, [panel]); // eslint-disable-line react-hooks/exhaustive-deps
+  React.useEffect(() => { if (panel === "model") setShowMore(false); }, [panel]);
   const permission = mode === "default" ? "詢問權限" : modeLabel(mode);
   const modelName = model ? chosen.label : "預設模型";
   const effortName = effort ? EFFORTS.find((e) => e.value === effort)?.label ?? effort : "";
