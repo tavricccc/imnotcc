@@ -202,7 +202,7 @@ function StepRow({ step }: { step: Item }) {
 const SHOWN = 3;
 
 /** The files a turn changed, as git counted them, with the lines each gained and lost. */
-export function FilesCard({ files }: { files: FileChange[] }) {
+export function FilesCard({ files, onOpen }: { files: FileChange[]; onOpen?: (path: string) => void }) {
   const [all, setAll] = React.useState(false);
   const rows = files.map((f) => [f.path, f] as const);
   const total = rows.reduce((a, [, s]) => ({ added: a.added + (s.added ?? 0), removed: a.removed + (s.removed ?? 0) }), { added: 0, removed: 0 });
@@ -220,9 +220,11 @@ export function FilesCard({ files }: { files: FileChange[] }) {
         {shown.map(([path, s]) => {
           const name = baseName(path);
           return (
-            <li className="flex min-w-0 items-center gap-3 py-1.5" key={path} title={path}>
-              <span className="min-w-0 flex-1 truncate text-ink-muted">{path.slice(0, path.length - name.length)}<span className="text-ink">{name}</span></span>
-              <Stats {...s} />
+            <li className="-mx-2 min-w-0" key={path}>
+              <button className="flex w-full min-w-0 items-center gap-3 rounded-tile px-2 py-1.5 text-left outline-none hover:bg-surface-raised focus-visible:bg-surface-raised disabled:pointer-events-none" disabled={!onOpen} onClick={() => onOpen?.(path)} title={path} type="button">
+                <span className="min-w-0 flex-1 truncate text-ink-muted">{path.slice(0, path.length - name.length)}<span className="text-ink">{name}</span></span>
+                <Stats {...s} />
+              </button>
             </li>
           );
         })}

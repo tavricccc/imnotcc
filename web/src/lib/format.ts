@@ -54,3 +54,9 @@ export const WINDOWS = [
 export type Tone = "ok" | "caution" | "danger";
 /** Ring and bar tone by how full something is. */
 export const tone = (pct: number): Tone => (pct >= 90 ? "danger" : pct >= 75 ? "caution" : "ok");
+
+export function formatBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}

@@ -21,7 +21,8 @@ import { Markdown } from "@/components/markdown";
 import { openImage } from "@/components/lightbox";
 import { SessionContext } from "@/lib/session-images";
 import { forgetFiles } from "@/lib/file-mentions";
-import { refreshPreview } from "@/lib/preview";
+import { closePreview, openPreview, preview, refreshPreview } from "@/lib/preview";
+import { PreviewPanel, useWidePreview } from "@/components/preview-panel";
 import { PermissionCard, type Answer, type PermissionRequest } from "@/components/permission-card";
 import { ToolCard } from "@/components/tool-card";
 import { FilesCard, TurnWork } from "@/components/turn";
@@ -116,6 +117,11 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const header = React.useRef<HTMLElement>(null);
   const composer = React.useRef<HTMLDivElement>(null);
   useVisualViewport(workspace, compact);
+  const wide = useWidePreview();
+  const previewing = useStore(preview).target;
+  // The panel beside the chat pushes it over; one for another session is closed.
+  const sidePreview = wide && previewing?.session === id;
+  React.useEffect(() => () => { if (preview.get().target?.session === id) closePreview(); }, [id]);
 
   React.useLayoutEffect(() => {
     const el = scrollArea.current;
@@ -434,7 +440,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
 
   return (
     <SessionContext.Provider value={id}>
-    <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:left-[var(--desktop-inset)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace}>
+    <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:left-[var(--desktop-inset)] motion-safe:transition-[left,right] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace} style={sidePreview ? { right: "var(--preview-width, 0px)" } : undefined}>
       <header className="pointer-events-none relative z-30 shrink-0 px-[var(--gutter)] pt-[calc(var(--safe-top)+0.5rem)] md:px-8 md:pt-4 [&>div]:pointer-events-auto" ref={header}>
         <div className="glass-float mx-auto flex max-w-3xl items-center gap-2 rounded-full p-1.5">
           <Button aria-label="返回" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
@@ -461,7 +467,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
               if (!view.groupTools) return items.map((item) => <Entry bubbles={view.bubbles} item={item} key={item.key} />);
               return turnRows(items, running, changes).map((row) => row.kind === "work"
                 ? <TurnWork end={row.end} items={row.items} key={row.key} live={row.live} start={row.start} />
-                : row.kind === "files" ? <FilesCard files={row.files} key={row.key} />
+                : row.kind === "files" ? <FilesCard files={row.files} key={row.key} onOpen={(path) => openPreview({ kind: "diff", session: id, turn: row.turn, path, files: row.files })} />
                 : <Entry bubbles={view.bubbles} item={row.item} key={row.item.key} />);
             })()}
             {s.draft ? <Markdown className={cn("content-in", view.bubbles && BUBBLE)} text={s.draft} /> : null}
@@ -588,6 +594,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         tone="danger"
       />
     </div>
+    <PreviewPanel />
     </SessionContext.Provider>
   );
 }

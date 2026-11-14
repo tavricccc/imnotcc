@@ -3,7 +3,7 @@ import type { Item } from "./transcript";
 export type TurnRow =
   | { kind: "item"; item: Item }
   | { kind: "work"; key: string; items: Item[]; start?: number; end?: number; live: boolean }
-  | { kind: "files"; key: string; files: FileChange[] };
+  | { kind: "files"; key: string; turn: string; files: FileChange[] };
 
 /** A file a turn changed, as git counted it; binary files have no line counts. */
 export interface FileChange { path: string; added: number | null; removed: number | null }
@@ -31,7 +31,7 @@ export function turnRows(items: Item[], running: boolean, changes: Record<string
       out.push({ kind: "work", key: `work-${segment[0].key}`, items: segment.slice(0, last + 1), start, end: times.length ? Math.max(...times) : undefined, live });
       for (const item of segment.slice(last + 1)) out.push({ kind: "item", item });
       const files = prompt ? changes[prompt] : undefined;
-      if (files?.length && !live) out.push({ kind: "files", key: `files-${segment[0].key}`, files });
+      if (prompt && files?.length && !live) out.push({ kind: "files", key: `files-${segment[0].key}`, turn: prompt, files });
     }
     i = j;
   }
