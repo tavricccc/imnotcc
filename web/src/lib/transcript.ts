@@ -1,5 +1,5 @@
 // @ts-nocheck -- plain JS shapes from Claude Code messages; the screens read them as Item.
-export interface Item { key: string; type: string; text?: string; command?: boolean; error?: boolean; summary?: string; id?: string; name?: string; input?: any; result?: string | null; done?: boolean; image?: string; images?: string[]; calm?: boolean; responseId?: string; beforeTool?: boolean; at?: number; endAt?: number; uuid?: string }
+export interface Item { key: string; type: string; text?: string; command?: boolean; error?: boolean; summary?: string; id?: string; name?: string; input?: any; result?: string | null; done?: boolean; image?: string; images?: string[]; calm?: boolean; output?: boolean; responseId?: string; beforeTool?: boolean; at?: number; endAt?: number; uuid?: string }
 export interface Transcript { items: Item[]; tools: Map<string, Item>; seen: Set<string> }
 
 // Turns Claude Code messages (from history or live) into what the chat shows:
@@ -31,7 +31,7 @@ function userText(t, key, text, at) {
     return push({ key, type: 'note', text: `${cmd[1].trim()}${args ? ` ${args}` : ''}`, command: true });
   }
   const out = text.match(STDOUT) ?? text.match(STDERR);
-  if (out) return out[1].trim() && push({ key, type: 'note', text: out[1].trim().replace(/\x1b\[[0-9;]*m/g, '') });
+  if (out) return out[1].trim() && push({ key, type: 'note', text: out[1].trim().replace(/\x1b\[[0-9;]*m/g, ''), output: true, error: !STDOUT.test(text) });
   if (text.startsWith('Caveat: The messages below')) return;
   if (text.startsWith('[Request interrupted')) return push({ key, type: 'note', text: '已中斷' });
   if (/^This session is being continued from a previous conversation/.test(text)) {

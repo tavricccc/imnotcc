@@ -693,8 +693,11 @@ function Entry({ bubbles, item }: { bubbles: boolean; item: Item }) {
     case "tool":
       return <ToolCard tool={item} />;
     default:
+      // A slash command reads as the user's own message, and what it printed as the reply.
+      if (item.command) return <div className="content-in max-w-[85%] justify-self-end whitespace-pre-wrap break-words rounded-[1.25rem] rounded-br-md bg-accent-soft px-4 py-2.5 font-mono text-sm text-ink" data-selectable="">{item.text}</div>;
+      if (item.output) return <pre className={cn("content-in max-w-[92%] justify-self-start overflow-x-auto whitespace-pre-wrap break-words rounded-[1.25rem] rounded-bl-md bg-surface-solid px-4 py-2.5 font-mono text-[0.8125rem] text-ink shadow-panel", item.error && "text-danger")} data-selectable="">{item.text}</pre>;
       return (
-        <p className={cn("content-in whitespace-pre-wrap text-[0.8125rem] text-ink-muted", item.command ? "max-w-[85%] justify-self-end text-right font-mono" : "justify-self-start", item.error && "text-danger")}>
+        <p className={cn("content-in justify-self-start whitespace-pre-wrap text-[0.8125rem] text-ink-muted", item.error && "text-danger")}>
           {item.text}
         </p>
       );

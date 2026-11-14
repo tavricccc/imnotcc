@@ -112,7 +112,7 @@ export function Lightbox() {
           {src ? (
             <img
               alt=""
-              className={cn("pointer-events-auto absolute inset-0 m-auto size-full object-contain will-change-transform", !zoomed && "transition-transform duration-200 ease-out")}
+              className={cn("pointer-events-auto absolute inset-3 m-auto size-[calc(100%-1.5rem)] object-contain sm:inset-8 sm:size-[calc(100%-4rem)] will-change-transform", !zoomed && "transition-transform duration-200 ease-out")}
               draggable={false}
               src={src}
               style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
