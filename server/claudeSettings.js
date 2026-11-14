@@ -13,10 +13,23 @@ const SIZE = /^\d{2,4}k$|^\d{5,7}$/i;
 const MODEL = /^[\w.\-[\]]+$/;
 
 const envs = () => (wsl.available() ? ['win', 'wsl'] : ['win']);
+const mdFile = (env) => path.join(path.dirname(settingsFile(env)), 'CLAUDE.md');
+const EFFORT = /^(low|medium|high|xhigh|max)$/;
 const settingsFile = (env) => (env === 'wsl' ? wsl.hostPath(`${wsl.homeDir()}/.claude/settings.json`) : WIN_SETTINGS);
 
 function readModelSettings(env) {
   try { return JSON.parse(fs.readFileSync(settingsFile(env), 'utf8')).modelSettings ?? {}; } catch { return {}; }
+}
+
+function readJson(env) {
+  try { return JSON.parse(fs.readFileSync(settingsFile(env), 'utf8')); } catch (e) { if (e.code === 'ENOENT') return {}; throw new Error('settings.json 讀不了或格式不對，沒有改動。'); }
+}
+
+function writeAtomic(file, text) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.imnotcc.tmp`;
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file);
 }
 
 async function runCommand(env, model, text) {
@@ -43,5 +56,36 @@ export function claudeSettingsRoutes(app, wrap) {
     const reply = await runCommand(env, model, `/autocompact ${size}`);
     const window = readModelSettings(env)[model]?.autoCompactWindow ?? null;
     res.json({ reply, window });
+  }));
+
+  app.get('/api/claude-global', (_req, res) => {
+    const read = (env) => { try { return fs.readFileSync(mdFile(env), 'utf8'); } catch { return ''; } };
+    res.json({
+      envs: envs(),
+      claudeMd: Object.fromEntries(envs().map((env) => [env, read(env)])),
+      efforts: envs().flatMap((env) => Object.entries(readModelSettings(env)).map(([model, v]) => ({ env, model, effort: v?.effortLevel ?? null }))),
+    });
+  });
+
+  app.put('/api/claude-md', wrap(async (req, res) => {
+    const env = String(req.body?.env ?? 'win');
+    if (!envs().includes(env)) return res.status(400).json({ error: '環境不對。' });
+    if (typeof req.body?.text !== 'string' || req.body.text.length > 200_000) return res.status(400).json({ error: '內容不對或太長。' });
+    writeAtomic(mdFile(env), req.body.text);
+    res.json({ ok: true });
+  }));
+
+  app.put('/api/default-effort', wrap(async (req, res) => {
+    const env = String(req.body?.env ?? 'win');
+    const model = String(req.body?.model ?? '');
+    const effort = req.body?.effort ? String(req.body.effort) : null;
+    if (!envs().includes(env)) return res.status(400).json({ error: '環境不對。' });
+    if (!MODEL.test(model) || (effort && !EFFORT.test(effort))) return res.status(400).json({ error: '格式不對。' });
+    const json = readJson(env);
+    const entry = { ...(json.modelSettings?.[model] ?? {}) };
+    if (effort) entry.effortLevel = effort; else delete entry.effortLevel;
+    json.modelSettings = { ...(json.modelSettings ?? {}), [model]: entry };
+    writeAtomic(settingsFile(env), `${JSON.stringify(json, null, 2)}\n`);
+    res.json({ effort });
   }));
 }

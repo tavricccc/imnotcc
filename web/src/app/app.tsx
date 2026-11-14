@@ -19,7 +19,7 @@ import { NewSessionPage } from "@/pages/new-session";
 import type { FirstPrompt } from "@/lib/prompt";
 import { PluginBrowsePage, PluginSourcesPage, PluginsPage } from "@/pages/plugins";
 import { SessionsPage } from "@/pages/sessions";
-import { CompactPage, DefaultsPage, FoldersPage, SettingsPage } from "@/pages/settings";
+import { CompactPage, GlobalPage, DefaultsPage, FoldersPage, SettingsPage } from "@/pages/settings";
 import { parseRoute, type Screen } from "./routes";
 import { AppShell } from "./shell";
 
@@ -32,6 +32,7 @@ function ScreenView({ screen }: { screen: Screen }) {
     case "settings-defaults": return <DefaultsPage />;
     case "settings-folders": return <FoldersPage />;
     case "settings-compact": return <CompactPage />;
+    case "settings-global": return <GlobalPage />;
     case "app-settings": return <AppSettingsPage />;
     default: return <SessionsPage />;
   }
