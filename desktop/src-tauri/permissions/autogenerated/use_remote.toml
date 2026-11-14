@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-use-remote"
+description = "Enables the use_remote command without any pre-configured scope."
+commands.allow = ["use_remote"]
+
+[[permission]]
+identifier = "deny-use-remote"
+description = "Denies the use_remote command without any pre-configured scope."
+commands.deny = ["use_remote"]

@@ -114,6 +114,10 @@ struct Inner {
 pub struct Supervisor(Arc<Mutex<Inner>>);
 
 impl Supervisor {
+    pub fn is_running(&self) -> bool {
+        self.0.lock().unwrap().pid.is_some()
+    }
+
     pub fn start(&self, app: &AppHandle) {
         let gen = {
             let mut s = self.0.lock().unwrap();

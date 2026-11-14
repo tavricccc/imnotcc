@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-restart-local"
+description = "Enables the restart_local command without any pre-configured scope."
+commands.allow = ["restart_local"]
+
+[[permission]]
+identifier = "deny-restart-local"
+description = "Denies the restart_local command without any pre-configured scope."
+commands.deny = ["restart_local"]

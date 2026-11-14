@@ -8,11 +8,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
-use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 fn default_port() -> u16 {
     4280
@@ -77,15 +76,120 @@ pub fn needs_update(app: &AppHandle, c: &Config) -> bool {
     c.local && c.installed_version.as_deref() != Some(&app.package_info().version.to_string())
 }
 
-/// The setup page is the only page allowed to drive the app.
-fn from_setup_page(w: &WebviewWindow) -> Result<(), String> {
+/// Bundled setup page and configured server origins may call desktop commands.
+fn from_trusted_page(app: &AppHandle, w: &WebviewWindow) -> Result<(), String> {
     let url = w.url().map_err(|e| e.to_string())?;
-    let ok = matches!(url.scheme(), "tauri") || url.host_str() == Some("tauri.localhost");
-    if ok { Ok(()) } else { Err("not allowed from this page".into()) }
+    if matches!(url.scheme(), "tauri") || url.host_str() == Some("tauri.localhost") {
+        return Ok(());
+    }
+    let cfg = app.state::<AppState>().config.lock().unwrap().clone();
+    if cfg.local {
+        let local_ok = url.scheme() == "http"
+            && matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
+            && url.port_or_known_default() == Some(cfg.port);
+        if local_ok {
+            return Ok(());
+        }
+    }
+    if let Some(ref u) = cfg.url {
+        if let Ok(parsed) = u.parse::<tauri::Url>() {
+            if url.scheme() == parsed.scheme()
+                && url.host_str() == parsed.host_str()
+                && url.port_or_known_default() == parsed.port_or_known_default()
+            {
+                return Ok(());
+            }
+        }
+    }
+    Err("not allowed from this page".into())
 }
 
 /// Where the bundled setup page lives in the webview (Windows serves app files from here).
 const SETUP_URL: &str = "http://tauri.localhost/index.html";
+
+const TITLEBAR_SCRIPT: &str = r#"
+(() => {
+  if (window.__ccrTitlebarInit) return;
+  window.__ccrTitlebarInit = true;
+  document.documentElement.style.setProperty("--safe-top", "36px");
+  const mount = () => {
+    if (document.getElementById("ccr-titlebar") || !document.body) return;
+    const style = document.createElement("style");
+    style.textContent = `
+      #ccr-titlebar {
+        position: fixed; top: 0; left: 0; right: 0; height: 36px; z-index: 2147483647;
+        display: flex; align-items: stretch; justify-content: space-between;
+        background: #f4f3f1; border-bottom: 1px solid rgba(20, 18, 16, 0.08);
+        color: #5c5855; user-select: none; -webkit-user-select: none;
+      }
+      @media (prefers-color-scheme: dark) {
+        #ccr-titlebar {
+          background: #0d0c0b; border-bottom-color: rgba(255, 255, 255, 0.09);
+          color: #aaa5a1;
+        }
+      }
+      #ccr-drag {
+        flex: 1; height: 100%;
+        display: flex; align-items: center; gap: 8px; padding-left: 14px;
+        font: 600 12px/1 "Segoe UI", "Microsoft JhengHei UI", system-ui, sans-serif;
+        letter-spacing: 0.01em;
+      }
+      .ccr-win-btns { display: flex; align-items: stretch; }
+      .ccr-win-btn {
+        width: 46px; height: 35px; border: 0; margin: 0; padding: 0;
+        background: transparent; color: inherit;
+        display: grid; place-items: center; cursor: default;
+        transition: background-color 120ms ease, color 120ms ease;
+      }
+      .ccr-win-btn:hover { background: rgba(128, 128, 128, 0.16); color: #151312; }
+      @media (prefers-color-scheme: dark) {
+        .ccr-win-btn:hover { color: #f4f2f0; }
+      }
+      .ccr-win-btn.close:hover { background: #c42b1c; color: #fff; }
+      .ccr-win-btn svg { width: 10px; height: 10px; stroke: currentColor; stroke-width: 1.3; fill: none; }
+    `;
+    document.head.appendChild(style);
+    const bar = document.createElement("div");
+    bar.id = "ccr-titlebar";
+    const win = window.__TAURI__ && window.__TAURI__.window && window.__TAURI__.window.getCurrentWindow();
+    const drag = document.createElement("div");
+    drag.id = "ccr-drag";
+    drag.setAttribute("data-tauri-drag-region", "");
+    drag.textContent = "cc-remote";
+    drag.addEventListener("mousedown", (e) => {
+      if (e.button === 0 && win) win.startDragging();
+    });
+    drag.addEventListener("dblclick", () => {
+      if (win) win.toggleMaximize();
+    });
+    bar.appendChild(drag);
+
+    const btns = document.createElement("div");
+    btns.className = "ccr-win-btns";
+    const mkBtn = (cls, label, svg, onClick) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ccr-win-btn " + cls;
+      b.setAttribute("aria-label", label);
+      b.innerHTML = svg;
+      b.addEventListener("click", onClick);
+      return b;
+    };
+    btns.appendChild(mkBtn("min", "最小化", '<svg viewBox="0 0 10 10"><line x1="1" y1="5.5" x2="9" y2="5.5"/></svg>', () => win && win.minimize()));
+    btns.appendChild(mkBtn("max", "最大化", '<svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7"/></svg>', () => win && win.toggleMaximize()));
+    btns.appendChild(mkBtn("close", "隱藏到系統匣", '<svg viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/></svg>', () => {
+      if (win) win.hide();
+    }));
+    bar.appendChild(btns);
+    document.body.appendChild(bar);
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mount, { once: true });
+  } else {
+    mount();
+  }
+})();
+"#;
 
 /// Show the window on `url`, or on the setup page when None. An existing window is navigated:
 /// destroying it and building a new "main" right away fails, as the label is freed later.
@@ -111,6 +215,8 @@ pub fn open_window(app: &AppHandle, url: Option<String>, show: bool) -> Result<(
         .title("cc-remote")
         .inner_size(1100.0, 820.0)
         .min_inner_size(360.0, 480.0)
+        .decorations(false)
+        .initialization_script(TITLEBAR_SCRIPT)
         .visible(show)
         .build()
         .map_err(|e| e.to_string())?;
@@ -145,13 +251,32 @@ struct StateView {
     node: Result<String, String>,
     needs_update: bool,
     local_url: String,
+    autostart: bool,
+    data_dir: String,
+    log_dir: String,
+    password: Option<String>,
+    server_running: bool,
+    app_version: String,
 }
 
 #[tauri::command]
 fn get_state(app: AppHandle, window: WebviewWindow) -> Result<StateView, String> {
-    from_setup_page(&window)?;
-    let config = app.state::<AppState>().config.lock().unwrap().clone();
-    Ok(StateView { needs_update: needs_update(&app, &config), config, node: local::node_version(), local_url: local_url(&app) })
+    from_trusted_page(&app, &window)?;
+    let state = app.state::<AppState>();
+    let config = state.config.lock().unwrap().clone();
+    let autostart = app.autolaunch().is_enabled().unwrap_or(false);
+    Ok(StateView {
+        needs_update: needs_update(&app, &config),
+        config,
+        node: local::node_version(),
+        local_url: local_url(&app),
+        autostart,
+        data_dir: local::data_dir(&app).display().to_string(),
+        log_dir: local::log_dir(&app).display().to_string(),
+        password: local::read_password(&app),
+        server_running: state.server.is_running(),
+        app_version: app.package_info().version.to_string(),
+    })
 }
 
 /// Ask `url` whether it is a cc-remote server. A Cloudflare Access login page counts: the real
@@ -169,7 +294,7 @@ fn probe(url: &str) -> Result<(), String> {
 
 #[tauri::command]
 async fn use_remote(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), String> {
-    from_setup_page(&window)?;
+    from_trusted_page(&app, &window)?;
     let url = url.trim().trim_end_matches('/').to_string();
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("網址要以 http:// 或 https:// 開頭".into());
@@ -187,35 +312,97 @@ async fn use_remote(app: AppHandle, window: WebviewWindow, url: String) -> Resul
 
 #[tauri::command]
 fn install_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
-    from_setup_page(&window)?;
+    from_trusted_page(&app, &window)?;
     local::start_install(app);
     Ok(())
 }
 
 #[tauri::command]
 fn open_url(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), String> {
-    from_setup_page(&window)?;
+    from_trusted_page(&app, &window)?;
     open_window(&app, Some(url), true)
 }
 
 #[tauri::command]
-fn open_node_download(window: WebviewWindow) -> Result<(), String> {
-    from_setup_page(&window)?;
+fn open_node_download(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
     std::process::Command::new("explorer").arg("https://nodejs.org/en/download").spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn save_local_settings(app: AppHandle, window: WebviewWindow, port: u16, origins: Vec<String>) -> Result<Config, String> {
+    from_trusted_page(&app, &window)?;
+    if port == 0 {
+        return Err("連接埠不能為 0".into());
+    }
+    let clean_origins: Vec<String> = origins.into_iter().map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty()).collect();
+    let state = app.state::<AppState>();
+    let (c, was_local, port_changed) = {
+        let mut c = state.config.lock().unwrap();
+        let port_changed = c.port != port;
+        c.port = port;
+        c.origins = clean_origins;
+        if c.local {
+            c.url = Some(format!("http://127.0.0.1:{port}"));
+        }
+        (c.clone(), c.local, port_changed)
+    };
+    save_config(&app, &c)?;
+    if was_local {
+        state.server.restart(&app);
+        if port_changed {
+            let _ = open_window(&app, c.url.clone(), true);
+        }
+    }
+    Ok(c)
+}
+
+#[tauri::command]
+fn set_autostart(app: AppHandle, window: WebviewWindow, enabled: bool) -> Result<bool, String> {
+    from_trusted_page(&app, &window)?;
+    let al = app.autolaunch();
+    if enabled {
+        al.enable().map_err(|e| format!("設定開機啟動失敗：{e}"))?;
+    } else {
+        al.disable().map_err(|e| format!("取消開機啟動失敗：{e}"))?;
+    }
+    Ok(al.is_enabled().unwrap_or(enabled))
+}
+
+#[tauri::command]
+fn restart_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
+    let st = app.state::<AppState>();
+    if !st.config.lock().unwrap().local {
+        return Err("這台電腦目前沒有設成 server。".into());
+    }
+    st.server.restart(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn open_data_dir(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
+    std::process::Command::new("explorer").arg(local::data_dir(&app)).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_log_dir(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
+    std::process::Command::new("explorer").arg(local::log_dir(&app)).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_setup(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
+    open_window(&app, None, true)
+}
+
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let autostart_on = app.autolaunch().is_enabled().unwrap_or(false);
-    let open = MenuItem::with_id(app, "open", "開啟 cc-remote", true, None::<&str>)?;
-    let password = MenuItem::with_id(app, "password", "顯示本機 server 密碼", true, None::<&str>)?;
-    let restart = MenuItem::with_id(app, "restart", "重新啟動本機 server", true, None::<&str>)?;
-    let logs = MenuItem::with_id(app, "logs", "開啟 log 資料夾", true, None::<&str>)?;
-    let change = MenuItem::with_id(app, "change", "更換 server…", true, None::<&str>)?;
-    let autostart = CheckMenuItem::with_id(app, "autostart", "登入 Windows 時啟動", true, autostart_on, None::<&str>)?;
+    let open = MenuItem::with_id(app, "open", "開啟視窗", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "結束", true, None::<&str>)?;
-    let sep = || PredefinedMenuItem::separator(app);
-    let menu = Menu::with_items(app, &[&open, &sep()?, &password, &restart, &logs, &sep()?, &change, &autostart, &sep()?, &quit])?;
-    let autostart2 = autostart.clone();
+    let sep = PredefinedMenuItem::separator(app)?;
+    let menu = Menu::with_items(app, &[&open, &sep, &quit])?;
 
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().unwrap().clone())
@@ -229,36 +416,6 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .on_menu_event(move |app, e| match e.id.as_ref() {
             "open" => show_window(app),
-            "password" => {
-                let msg = match local::read_password(app) {
-                    Some(p) => format!("本機 server 密碼：\n\n{p}\n\n（在網頁的設定裡改過密碼的話，這裡顯示的是最初的密碼）"),
-                    None => "這台電腦沒有設成 server，或 server 還沒啟動過。".into(),
-                };
-                app.dialog().message(msg).title("cc-remote").kind(MessageDialogKind::Info).show(|_| {});
-            }
-            "restart" => {
-                let st = app.state::<AppState>();
-                if st.config.lock().unwrap().local {
-                    st.server.restart(app);
-                } else {
-                    app.dialog().message("這台電腦沒有設成 server。").title("cc-remote").show(|_| {});
-                }
-            }
-            "logs" => {
-                let _ = std::process::Command::new("explorer").arg(local::log_dir(app)).spawn();
-            }
-            "change" => {
-                let _ = open_window(app, None, true);
-            }
-            "autostart" => {
-                let al = app.autolaunch();
-                let want = !al.is_enabled().unwrap_or(false);
-                let r = if want { al.enable() } else { al.disable() };
-                if let Err(err) = r {
-                    app.dialog().message(format!("設定開機啟動失敗：{err}")).kind(MessageDialogKind::Error).show(|_| {});
-                }
-                let _ = autostart2.set_checked(al.is_enabled().unwrap_or(false));
-            }
             "quit" => {
                 app.state::<AppState>().server.stop();
                 app.exit(0);
@@ -275,7 +432,19 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_window(app)))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![get_state, use_remote, install_local, open_url, open_node_download])
+        .invoke_handler(tauri::generate_handler![
+            get_state,
+            use_remote,
+            install_local,
+            open_url,
+            open_node_download,
+            save_local_settings,
+            set_autostart,
+            restart_local,
+            open_data_dir,
+            open_log_dir,
+            open_setup
+        ])
         .setup(|app| {
             let handle = app.handle().clone();
             let config = load_config(&handle);

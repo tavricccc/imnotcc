@@ -3,133 +3,439 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cc-remote</title>
+<title>cc-remote 快速設定</title>
 <style>
-  :root { color-scheme: light dark; --bg: #f6f5f2; --card: #fff; --fg: #1d1c1a; --muted: #6b6862; --line: #e2dfd8; --accent: #c96442; --bad: #b3261e; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #1b1a18; --card: #242320; --fg: #ecebe7; --muted: #a19e96; --line: #36342f; --accent: #e0805e; --bad: #f2b8b5; } }
+  :root {
+    color-scheme: light;
+    --canvas: #f4f3f1;
+    --surface: #ffffff;
+    --surface-raised: rgb(20 18 16 / 5%);
+    --surface-pressed: rgb(20 18 16 / 9%);
+    --ink: #151312;
+    --ink-muted: #5c5855;
+    --ink-faint: #918c88;
+    --line: rgb(20 18 16 / 9%);
+    --contrast: #dc3a1c;
+    --on-contrast: #ffffff;
+    --accent-soft: rgb(220 58 28 / 11%);
+    --accent-ink: #b92c0e;
+    --danger: #c2185b;
+    --positive: #23915a;
+    --elevation-panel: 0 0 0 1px rgb(20 18 16 / 4%), 0 8px 24px rgb(40 30 24 / 7%);
+    --elevation-float: 0 0 0 1px rgb(20 18 16 / 6%), 0 16px 40px rgb(40 30 24 / 14%);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --canvas: #0d0c0b;
+      --surface: #181615;
+      --surface-raised: rgb(255 255 255 / 6%);
+      --surface-pressed: rgb(255 255 255 / 10%);
+      --ink: #f4f2f0;
+      --ink-muted: #aaa5a1;
+      --ink-faint: #726d69;
+      --line: rgb(255 255 255 / 9%);
+      --contrast: #ff6a4a;
+      --on-contrast: #2a0a02;
+      --accent-soft: rgb(255 106 74 / 16%);
+      --accent-ink: #ff9076;
+      --danger: #ff7ba6;
+      --positive: #5fcb9b;
+      --elevation-panel: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 12px 32px rgb(0 0 0 / 28%);
+      --elevation-float: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 18px 48px rgb(0 0 0 / 45%);
+    }
+  }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 15px/1.55 "Segoe UI", "Microsoft JhengHei UI", system-ui, sans-serif; background: var(--bg); color: var(--fg); }
-  main { max-width: 560px; margin: 0 auto; padding: 48px 24px; }
-  h1 { font-size: 22px; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 28px; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
-  h2 { font-size: 16px; margin: 0 0 6px; }
-  p { margin: 0 0 12px; color: var(--muted); }
-  input { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); font: inherit; }
-  button { margin-top: 12px; padding: 9px 16px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
-  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
-  button:disabled { opacity: .5; cursor: default; }
-  .err { color: var(--bad); margin-top: 10px; white-space: pre-wrap; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--canvas);
+    color: var(--ink);
+    font: 15px/1.55 "Segoe UI", "Microsoft JhengHei UI", system-ui, sans-serif;
+    display: grid;
+    place-items: center;
+    padding: 56px 20px 36px;
+  }
+  .shell {
+    width: 100%;
+    max-width: 540px;
+    animation: fadeUp 220ms cubic-bezier(.22, 1, .36, 1);
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .hero {
+    display: grid;
+    justify-items: center;
+    text-align: center;
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .brand-icon {
+    width: 68px;
+    height: 68px;
+    border-radius: 22.37%;
+    box-shadow: var(--elevation-float);
+  }
+  h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--ink-muted); margin: 0; font-size: 14px; }
+
+  .panel {
+    background: var(--surface);
+    border-radius: 22px;
+    box-shadow: var(--elevation-panel);
+    padding: 22px;
+  }
+  .choices {
+    display: grid;
+    gap: 12px;
+  }
+  .choice-card {
+    width: 100%;
+    text-align: left;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 18px 20px;
+    color: var(--ink);
+    cursor: pointer;
+    display: grid;
+    gap: 6px;
+    transition: transform 140ms ease, border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+    box-shadow: var(--elevation-panel);
+  }
+  .choice-card:hover {
+    border-color: var(--contrast);
+    background: var(--surface);
+    transform: translateY(-1px);
+  }
+  .choice-card:active { transform: translateY(0); }
+  .choice-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .choice-title { font-size: 16px; font-weight: 650; }
+  .choice-desc { font-size: 13.5px; color: var(--ink-muted); margin: 0; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 600;
+    padding: 3px 10px; border-radius: 999px;
+    background: var(--surface-raised); color: var(--ink-muted);
+  }
+  .pill.ok { background: color-mix(in srgb, var(--positive) 14%, transparent); color: var(--positive); }
+  .pill.warn { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+  .pill.accent { background: var(--accent-soft); color: var(--accent-ink); }
+
+  .back-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: 0; padding: 4px 8px; margin: -4px 0 12px -8px;
+    border-radius: 8px; color: var(--ink-muted); font: inherit; font-size: 13.5px; font-weight: 600;
+    cursor: pointer;
+  }
+  .back-btn:hover { background: var(--surface-raised); color: var(--ink); }
+
+  .field { margin-top: 14px; }
+  .field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .hint { font-size: 12.5px; color: var(--ink-muted); margin-top: 5px; }
+  input[type="url"], input[type="number"], textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-raised);
+    color: var(--ink);
+    font: inherit;
+    outline: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  input:focus, textarea:focus {
+    border-color: var(--contrast);
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  textarea { min-height: 70px; resize: vertical; font: 13px/1.45 Consolas, monospace; }
+
+  .check {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 16px; padding: 10px 12px; border-radius: 12px;
+    background: var(--surface-raised); cursor: pointer; font-size: 13.5px; font-weight: 500;
+  }
+  .check input { width: 16px; height: 16px; accent-color: var(--contrast); margin: 0; }
+
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+  .btn {
+    border: 0; border-radius: 999px; padding: 10px 20px;
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    transition: opacity 120ms ease, transform 100ms ease, background-color 120ms ease;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+  .btn-primary { background: var(--contrast); color: var(--on-contrast); flex: 1; }
+  .btn-ghost { background: var(--surface-raised); color: var(--ink); }
+  .btn-ghost:hover:not(:disabled) { background: var(--surface-pressed); }
+
+  .err { color: var(--danger); font-size: 13px; margin-top: 10px; white-space: pre-wrap; }
   .err:empty { display: none; }
-  pre { max-height: 220px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font: 12px/1.5 Consolas, monospace; white-space: pre-wrap; margin: 12px 0 0; }
-  .pw { font: 600 20px Consolas, monospace; letter-spacing: .04em; user-select: all; }
+
+  .log-box {
+    margin-top: 14px;
+    max-height: 220px;
+    overflow: auto;
+    border-radius: 14px;
+    background: var(--canvas);
+    border: 1px solid var(--line);
+    padding: 12px;
+    font: 12px/1.55 Consolas, monospace;
+    color: var(--ink-muted);
+    white-space: pre-wrap;
+  }
+  .spinner {
+    width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--accent-soft);
+    border-top-color: var(--contrast);
+    animation: spin 700ms linear infinite;
+    display: inline-block;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .pw-box {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    margin-top: 10px; padding: 12px 14px; border-radius: 14px;
+    background: var(--surface-raised); border: 1px solid var(--line);
+  }
+  .pw { font: 700 20px Consolas, monospace; letter-spacing: .06em; user-select: all; }
   [hidden] { display: none !important; }
 </style>
 </head>
 <body>
-<main>
-  <h1>cc-remote</h1>
-  <p class="sub">連到一台跑 cc-remote 的電腦，或把這台電腦設成 server。</p>
-
-  <div id="choose">
-    <section>
-      <h2>連到現有的 server</h2>
-      <p>例如 https://cc.example.com。</p>
-      <form id="remote-form">
-        <input id="url" type="url" placeholder="https://" required autocomplete="url">
-        <button id="remote-btn" type="submit">連線</button>
-      </form>
-      <div class="err" id="remote-err"></div>
-    </section>
-
-    <section>
-      <h2>把這台電腦設成 server</h2>
-      <p>用這台電腦上的 Node.js 跑 cc-remote 和 Claude Code。關掉視窗後 server 會留在系統匣繼續跑。需要先登入過 Claude Code。</p>
-      <div id="node-missing" hidden>
-        <div class="err" id="node-err"></div>
-        <button class="ghost" id="node-dl" type="button">下載 Node.js</button>
-        <button class="ghost" id="node-recheck" type="button">我裝好了，重新檢查</button>
-      </div>
-      <button id="local-btn" type="button">設成 server</button>
-    </section>
+<div class="shell">
+  <div class="hero">
+    <img alt="cc-remote" class="brand-icon" src="icon.svg">
+    <h1 id="hero-title">歡迎使用 cc-remote</h1>
+    <p class="sub" id="hero-sub">選擇這台電腦的角色，完成快速設定</p>
   </div>
 
-  <section id="installing" hidden>
-    <h2 id="inst-title">正在安裝本機 server…</h2>
-    <p>會從 npm 下載 Claude Agent SDK 等套件，約 400 MB。</p>
-    <pre id="log"></pre>
-    <div class="err" id="inst-err"></div>
-    <div id="inst-fail" hidden>
-      <button id="retry" type="button">重試</button>
-      <button class="ghost" id="back" type="button">返回</button>
-    </div>
-  </section>
+  <!-- Step 1: Choose Role -->
+  <div class="choices" id="step-choose" hidden>
+    <button class="choice-card" id="pick-local" type="button">
+      <div class="choice-head">
+        <span class="choice-title">把這台電腦設為 Server</span>
+        <span class="pill" id="node-badge">檢查 Node.js…</span>
+      </div>
+      <p class="choice-desc">在這台電腦本機執行 cc-remote 與 Claude Code，關掉視窗後會留在系統匣繼續運作，讓手機或其他裝置連線。</p>
+    </button>
 
-  <section id="done" hidden>
-    <h2>本機 server 已經在跑了</h2>
-    <p>登入用的密碼（之後可以從系統匣「顯示本機 server 密碼」再看）：</p>
-    <div class="pw" id="pw"></div>
-    <p style="margin-top:12px">要從手機連，需要另外設定通道（例如 Cloudflare Tunnel）指到 <span id="local-url"></span>。</p>
-    <button id="open-local" type="button">開啟</button>
-  </section>
-</main>
+    <button class="choice-card" id="pick-remote" type="button">
+      <div class="choice-head">
+        <span class="choice-title">連到現有的 Server</span>
+        <span class="pill accent">Client</span>
+      </div>
+      <p class="choice-desc">這台電腦只作為桌面端視窗，連線到另一台已經架設好的 cc-remote 伺服器。</p>
+    </button>
+  </div>
+
+  <!-- Step 2A: Remote Client Setup -->
+  <div class="panel" id="step-remote" hidden>
+    <button class="back-btn" id="remote-back" type="button">← 返回選擇</button>
+    <h2>連到現有的 Server</h2>
+    <p class="sub">輸入伺服器網址，之後隨時可以在「App 設定」裡更換。</p>
+    <form id="remote-form">
+      <div class="field">
+        <label for="remote-url">Server 網址</label>
+        <input id="remote-url" type="url" placeholder="https://cc.example.com" required autocomplete="url">
+      </div>
+      <label class="check">
+        <input id="remote-autostart" type="checkbox" checked>
+        <span>登入 Windows 時自動啟動（最小化至系統匣）</span>
+      </label>
+      <div class="err" id="remote-err"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="remote-submit" type="submit">連線並開始使用</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Step 2B: Local Server Setup -->
+  <div class="panel" id="step-local" hidden>
+    <button class="back-btn" id="local-back" type="button">← 返回選擇</button>
+    <h2>把這台電腦設為 Server</h2>
+    <p class="sub">需具備 Node.js 20 以上並登入過 Claude Code。</p>
+
+    <div id="node-missing" hidden>
+      <div class="err" id="node-err"></div>
+      <div class="actions">
+        <button class="btn btn-ghost" id="node-dl" type="button">下載 Node.js</button>
+        <button class="btn btn-primary" id="node-recheck" type="button">我裝好了，重新檢查</button>
+      </div>
+    </div>
+
+    <form id="local-form">
+      <div class="field">
+        <label for="local-port">監聽連接埠（Port）</label>
+        <input id="local-port" type="number" min="1" max="65535" value="4280" required>
+      </div>
+      <div class="field">
+        <label for="local-origins">公開網域（選填，對應 CC_REMOTE_ORIGINS）</label>
+        <textarea id="local-origins" placeholder="https://cc.example.com"></textarea>
+        <div class="hint">若會透過 Cloudflare Tunnel 等反向代理從手機連線，請填入公開網址，每行一個。</div>
+      </div>
+      <label class="check">
+        <input id="local-autostart" type="checkbox" checked>
+        <span>登入 Windows 時自動啟動（最小化至系統匣）</span>
+      </label>
+      <div class="err" id="local-err"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="local-submit" type="submit">安裝並啟動 Server</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Step 3: Installing -->
+  <div class="panel" id="step-installing" hidden>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="spinner" id="inst-spinner"></span>
+      <h2 id="inst-title" style="margin:0;">正在安裝本機 Server…</h2>
+    </div>
+    <p class="sub" style="margin-top:6px;">正在使用本機 Node.js 下載 Claude Agent SDK 等套件（約 400 MB），請稍候。</p>
+    <pre class="log-box" id="log"></pre>
+    <div class="err" id="inst-err"></div>
+    <div class="actions" id="inst-fail" hidden>
+      <button class="btn btn-ghost" id="inst-back" type="button">返回修改</button>
+      <button class="btn btn-primary" id="inst-retry" type="button">重試安裝</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Done -->
+  <div class="panel" id="step-done" hidden>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span class="pill ok">就緒</span>
+      <h2 style="margin:0;">本機 Server 已經啟動</h2>
+    </div>
+    <p class="sub">請記下登入密碼，之後也能在「App 設定」裡再次查看或更改。</p>
+    <div class="pw-box">
+      <span class="pw" id="pw"></span>
+      <button class="btn btn-ghost" id="copy-pw" type="button">複製密碼</button>
+    </div>
+    <p class="hint" style="margin-top:14px;">本機位址：<strong id="local-url"></strong>。若要從手機遠端連線，請將通道指到這個位址。</p>
+    <div class="actions">
+      <button class="btn btn-primary" id="open-local" type="button">開始使用 cc-remote</button>
+    </div>
+  </div>
+</div>
+
 <script>
   const { invoke } = window.__TAURI__.core;
   const { listen } = window.__TAURI__.event;
   const $ = (id) => document.getElementById(id);
-  const show = (id) => { for (const s of ["choose", "installing", "done"]) $(s).hidden = s !== id; };
+  const steps = ["step-choose", "step-remote", "step-local", "step-installing", "step-done"];
+  const show = (id) => { for (const s of steps) $(s).hidden = s !== id; };
   let doneUrl = null;
+  let stateCache = null;
 
   async function refresh() {
     const st = await invoke("get_state");
+    stateCache = st;
     $("local-url").textContent = st.local_url;
-    if (st.config.url && !st.config.local) $("url").value = st.config.url;
+    $("local-port").value = st.config.port || 4280;
+    $("local-origins").value = (st.config.origins || []).join("\n");
+    if (st.config.url && !st.config.local) $("remote-url").value = st.config.url;
+
     const nodeOk = "Ok" in st.node;
+    const badge = $("node-badge");
+    badge.textContent = nodeOk ? `Node ${st.node.Ok}` : "需安裝 Node.js";
+    badge.className = "pill " + (nodeOk ? "ok" : "warn");
+
     $("node-missing").hidden = nodeOk;
-    $("local-btn").disabled = !nodeOk;
-    if (!nodeOk) $("node-err").textContent = st.node.Err + "。請先安裝 Node.js 20 以上，裝好後重新檢查。";
+    $("local-form").hidden = !nodeOk;
+    if (!nodeOk) {
+      $("node-err").textContent = st.node.Err + "。請先安裝 Node.js 20 以上版本。";
+    }
     return st;
   }
+
+  $("pick-local").addEventListener("click", () => show("step-local"));
+  $("pick-remote").addEventListener("click", () => show("step-remote"));
+  $("local-back").addEventListener("click", () => show("step-choose"));
+  $("remote-back").addEventListener("click", () => show("step-choose"));
 
   $("remote-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     $("remote-err").textContent = "";
-    $("remote-btn").disabled = true;
-    try { await invoke("use_remote", { url: $("url").value }); }
-    catch (err) { $("remote-err").textContent = String(err); }
-    finally { $("remote-btn").disabled = false; }
+    $("remote-submit").disabled = true;
+    try {
+      await invoke("set_autostart", { enabled: $("remote-autostart").checked });
+      await invoke("use_remote", { url: $("remote-url").value });
+    } catch (err) {
+      $("remote-err").textContent = String(err);
+    } finally {
+      $("remote-submit").disabled = false;
+    }
   });
 
-  function install(update) {
-    $("inst-title").textContent = update ? "cc-remote 更新了，正在更新本機 server…" : "正在安裝本機 server…";
+  async function startInstall(update) {
+    $("inst-title").textContent = update ? "cc-remote 已更新，正在更新本機 Server…" : "正在安裝本機 Server…";
+    $("inst-spinner").hidden = false;
     $("log").textContent = "";
     $("inst-err").textContent = "";
     $("inst-fail").hidden = true;
-    show("installing");
-    invoke("install_local").catch((err) => { $("inst-err").textContent = String(err); $("inst-fail").hidden = false; });
+    show("step-installing");
+    try {
+      if (!update) {
+        const port = Number($("local-port").value);
+        const origins = $("local-origins").value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+        await invoke("save_local_settings", { port, origins });
+        await invoke("set_autostart", { enabled: $("local-autostart").checked });
+      }
+      await invoke("install_local");
+    } catch (err) {
+      $("inst-spinner").hidden = true;
+      $("inst-err").textContent = String(err);
+      $("inst-fail").hidden = false;
+    }
   }
 
-  listen("install-log", (e) => { const l = $("log"); l.textContent += e.payload + "\n"; l.scrollTop = l.scrollHeight; });
+  $("local-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    void startInstall(false);
+  });
+  $("inst-retry").addEventListener("click", () => void startInstall(false));
+  $("inst-back").addEventListener("click", () => show("step-local"));
+
+  listen("install-log", (e) => {
+    const l = $("log");
+    l.textContent += e.payload + "\n";
+    l.scrollTop = l.scrollHeight;
+  });
+
   listen("install-done", (e) => {
     const d = e.payload;
+    $("inst-spinner").hidden = true;
     if (d.ok) {
       doneUrl = d.url;
-      $("pw").textContent = d.password ?? "（找不到密碼檔，請看系統匣「顯示本機 server 密碼」）";
-      show("done");
+      $("local-url").textContent = d.url;
+      $("pw").textContent = d.password ?? "（請在「App 設定」查看）";
+      show("step-done");
     } else {
       $("inst-err").textContent = d.error + "\n完整紀錄：" + d.log;
       $("inst-fail").hidden = false;
     }
   });
 
-  $("local-btn").addEventListener("click", () => install(false));
-  $("retry").addEventListener("click", () => install(false));
-  $("back").addEventListener("click", () => show("choose"));
+  $("copy-pw").addEventListener("click", async () => {
+    const pw = $("pw").textContent;
+    if (!pw) return;
+    await navigator.clipboard.writeText(pw);
+    $("copy-pw").textContent = "已複製";
+    setTimeout(() => { $("copy-pw").textContent = "複製密碼"; }, 1200);
+  });
+
   $("open-local").addEventListener("click", () => invoke("open_url", { url: doneUrl }));
   $("node-dl").addEventListener("click", () => invoke("open_node_download"));
   $("node-recheck").addEventListener("click", refresh);
 
-  refresh().then((st) => { if (st.needs_update) install(true); });
+  refresh().then((st) => {
+    if (st.needs_update) void startInstall(true);
+    else show("step-choose");
+  });
 </script>
 </body>
 </html>

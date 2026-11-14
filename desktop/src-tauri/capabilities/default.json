@@ -1,7 +1,38 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Only the bundled setup page gets IPC; remote server pages get none.",
+  "description": "Allow main window IPC and frameless window controls; Rust guards desktop commands by trusted origin.",
   "windows": ["main"],
-  "permissions": ["core:default", "core:event:default"]
+  "local": true,
+  "remote": {
+    "urls": [
+      "http://127.0.0.1:*/*",
+      "http://localhost:*/*",
+      "http://*/*",
+      "http://*:*/*",
+      "https://*/*",
+      "https://*:*/*"
+    ]
+  },
+  "permissions": [
+    "core:default",
+    "core:event:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-hide",
+    "core:window:allow-close",
+    "core:window:allow-is-maximized",
+    "allow-get-state",
+    "allow-use-remote",
+    "allow-install-local",
+    "allow-open-url",
+    "allow-open-node-download",
+    "allow-save-local-settings",
+    "allow-set-autostart",
+    "allow-restart-local",
+    "allow-open-data-dir",
+    "allow-open-log-dir",
+    "allow-open-setup"
+  ]
 }
