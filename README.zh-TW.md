@@ -23,6 +23,7 @@
 
 - **依資料夾分組與臨時 session**：在已儲存的專案資料夾下建立 session，或開臨時 session；支援分支（`forkSession`）、改名（`renameSession`）與從列表移除（不刪除 CLI 紀錄檔）。
 - **串流對話與工具卡片**：透過 WebSocket 即時串流輸出、展開檢視工具呼叫與結果、預覽圖片與上傳圖片提問。關閉網頁後任務仍會在伺服器繼續執行，重新開啟時自動補回錯過的訊息。
+- **檔案預覽與差異**：Claude 提到的檔案會變成可點的標籤，在預覽面板中開啟（寬螢幕在對話右側，手機為 sheet），支援 Markdown 排版、程式碼上色、圖片與 PDF。每回合變更的檔案可逐一開啟左右對照的 diff。本機 HTML 會在新分頁以 sandbox 開啟，與 app 隔離。回合 diff 依賴 git 快照，約兩週後可能被 `git gc` 清除。
 - **權限控制**：每個 session 可切換權限模式（`default`、`acceptEdits`、`plan`、`auto`、`bypassPermissions`、`dontAsk`），非 bypass 模式下可在手機上即時允許或拒絕工具請求。
 - **斜線指令與快捷操作**：支援 SDK 回傳的 `/` 指令選單、切換模型與 effort、調整 `/autocompact` 門檻、中斷執行，以及一鍵複製 `cd <cwd> && claude --resume <id>`。
 - **用量檢視**：顯示 context token 細項、autocompact 門檻，以及 5 小時／7 天方案用量。

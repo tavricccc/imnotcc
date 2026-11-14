@@ -23,6 +23,7 @@
 
 - **Folder-grouped & temporary sessions**: Create persistent sessions under saved project folders or quick temporary sessions, fork (`forkSession`), rename (`renameSession`), or remove them from the list without deleting CLI transcripts.
 - **Streaming chat & tool cards**: Token-by-token WebSocket streaming, expandable tool call cards, inline/lightbox image previews, and image prompt attachments. Running turns continue on the server if you close the tab and catch up on reconnect.
+- **File preview & diffs**: Files Claude names become chips that open a preview panel (beside the chat on wide screens, a sheet on phones) with rendered Markdown, syntax-highlighted code, images and PDFs. Each turn's changed files open as a side-by-side diff, one file at a time. Local HTML pages open in a new tab, sandboxed away from the app. Per-turn diffs rely on git snapshots and may be cleared by `git gc` after about two weeks.
 - **Interactive permission control**: Switch permission modes (`default`, `acceptEdits`, `plan`, `auto`, `bypassPermissions`, `dontAsk`) per session, and approve or deny individual tool requests from your phone.
 - **Slash commands & session controls**: Trigger SDK-reported `/` commands, switch models and effort levels, adjust `/autocompact` thresholds, interrupt active turns, or copy `cd <cwd> && claude --resume <id>`.
 - **Context & plan usage**: Inspect token breakdown, autocompact threshold, and 5-hour / 7-day plan rate limits.
