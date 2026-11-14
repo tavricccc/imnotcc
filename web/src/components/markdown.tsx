@@ -1,8 +1,12 @@
 import * as React from "react";
+import { createPortal } from "react-dom";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { imageUrl, mentionedImages, SessionContext } from "@/lib/session-images";
 import { cn } from "@/lib/utils";
+import { chipLabel, markFiles, parseRef, resolveFile, type FileInfo } from "@/lib/file-mentions";
+import { openPreview } from "@/lib/preview";
+import { FileIcon } from "./file-icon";
 import { openImage, Thumb } from "./lightbox";
 
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
@@ -36,6 +40,7 @@ function render(text: string, session: string | null) {
     previews.push(urls);
     if (previews.length === MAX_PREVIEWS) break;
   }
+  if (session) markFiles(box.content);
   return { html: DOMPurify.sanitize(box.innerHTML), previews };
 }
 
@@ -52,6 +57,7 @@ export function Markdown({ className, text }: { className?: string; text: string
     el.addEventListener("error", failed, true);
     return () => el.removeEventListener("error", failed, true);
   }, []);
+  const chips = useFileChips(body, session, html);
   return (
     <div className={cn("grid min-w-0 gap-2", className)}>
       <div
@@ -60,13 +66,53 @@ export function Markdown({ className, text }: { className?: string; text: string
         data-selectable=""
         onClick={(event) => {
           const target = event.target as HTMLElement;
-          if (target instanceof HTMLImageElement) { event.preventDefault(); openImage(target.src); }
+          if (target instanceof HTMLImageElement) { event.preventDefault(); openImage(target.src); return; }
+          const chip = target.closest<HTMLElement>("[data-file-kind]");
+          const info = chip && found.get(chip);
+          if (!session || !chip || !info) return;
+          event.preventDefault();
+          openPreview({ kind: "file", session, path: info.path, line: parseRef(chip.dataset.file ?? "").line });
         }}
         ref={body}
       />
+      {chips.map((c) => createPortal(<FileIcon className="size-[1.05em]" kind={c.info.kind} name={c.info.name} />, c.icon, c.key))}
       {previews.length ? (
         <div className="flex flex-wrap gap-2">{previews.map((urls) => <Thumb key={urls.join("\n")} src={urls} />)}</div>
       ) : null}
     </div>
   );
+}
+
+// The file each chip opens, kept beside the DOM the markdown owns.
+const found = new WeakMap<HTMLElement, FileInfo>();
+interface Chip { key: string; icon: HTMLElement; info: FileInfo }
+
+/**
+ * Turns the paths marked in rendered markdown into chips once the server confirms each exists.
+ * Paths that are not there are left as written.
+ */
+function useFileChips(body: React.RefObject<HTMLDivElement | null>, session: string | null, html: string) {
+  const [chips, setChips] = React.useState<Chip[]>([]);
+  React.useEffect(() => {
+    const el = body.current;
+    setChips([]);
+    if (!el || !session) return;
+    let live = true;
+    const nodes = [...el.querySelectorAll<HTMLElement>("[data-file]")];
+    void Promise.all(nodes.map(async (node, i) => {
+      const info = await resolveFile(session, parseRef(node.dataset.file ?? "").path);
+      if (!live || !info || info.kind === "dir" || !node.isConnected) return null;
+      found.set(node, info);
+      node.dataset.fileKind = info.kind;
+      node.title = info.path;
+      const label = chipLabel(node.dataset.file ?? "", info);
+      if (node.textContent !== label && node.tagName !== "A") node.textContent = label;
+      const icon = document.createElement("span");
+      icon.className = "file-ref-icon";
+      node.prepend(icon);
+      return { key: `${i}`, icon, info };
+    })).then((list) => { if (live) setChips(list.filter((c): c is Chip => !!c)); });
+    return () => { live = false; };
+  }, [body, session, html]);
+  return chips;
 }

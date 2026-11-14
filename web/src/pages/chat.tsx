@@ -20,6 +20,8 @@ import { ComposerSettings } from "@/components/composer-settings";
 import { Markdown } from "@/components/markdown";
 import { openImage } from "@/components/lightbox";
 import { SessionContext } from "@/lib/session-images";
+import { forgetFiles } from "@/lib/file-mentions";
+import { refreshPreview } from "@/lib/preview";
 import { PermissionCard, type Answer, type PermissionRequest } from "@/components/permission-card";
 import { ToolCard } from "@/components/tool-card";
 import { FilesCard, TurnWork } from "@/components/turn";
@@ -308,7 +310,11 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
           if (initialMessages) initialMessages.push(m.msg);
           else onSdk(m.msg);
           break;
-        case "changes": setChanges((c) => ({ ...c, [m.uuid]: m.files })); break;
+        case "changes":
+          setChanges((c) => ({ ...c, [m.uuid]: m.files }));
+          // Files the turn made or changed: check paths again, and reload what the panel shows.
+          if (m.files.length) { forgetFiles(id); refreshPreview(); }
+          break;
         case "status": setS((x) => ({ ...x, status: m.status, open: m.status === "running" ? true : x.open })); break;
         case "mode": setS((x) => ({ ...x, mode: m.permissionMode })); break;
         case "model": setS((x) => ({ ...x, model: m.model })); break;

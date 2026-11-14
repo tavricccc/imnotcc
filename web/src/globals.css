@@ -65,6 +65,11 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 .markdown-body pre { margin-block: 0.75rem; overflow-x: auto; border-radius: var(--radius-tile); background: var(--surface-raised); padding: 0.875rem 1rem; font-size: 0.8125rem; line-height: 1.55; }
 .markdown-body pre code { padding: 0; background: transparent; font-size: inherit; }
 .markdown-body a { color: var(--accent-ink); text-decoration: underline; text-underline-offset: 3px; }
+/* A file Claude named that exists: a chip with a monochrome icon that opens the preview. */
+.markdown-body [data-file-kind] { display: inline-flex; max-width: 100%; align-items: baseline; gap: 0.3em; vertical-align: baseline; cursor: pointer; border-radius: 0.375rem; background: var(--surface-raised); padding: 0.0625rem 0.375rem; color: var(--ink); text-decoration: none; overflow-wrap: anywhere; transition: background-color var(--motion-control) var(--ease-move); }
+.markdown-body span[data-file-kind], .markdown-body a[data-file-kind] { font-size: 0.9375em; }
+.markdown-body [data-file-kind]:hover { background: var(--surface-pressed); }
+.markdown-body .file-ref-icon { display: inline-flex; flex-shrink: 0; align-self: center; color: var(--ink-muted); }
 .markdown-body hr { margin-block: 1.25rem; border-color: var(--line); }
 .markdown-body table { display: block; overflow-x: auto; margin-block: 0.75rem; border-collapse: collapse; font-size: 0.875rem; }
 .markdown-body :is(th, td) { border: 1px solid var(--line); padding: 0.375rem 0.625rem; text-align: left; }
