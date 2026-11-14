@@ -185,10 +185,14 @@ class Runner {
     (async () => {
       const { before } = turn;
       if (!before) return;
-      const files = await changes.diff(before, await changes.snapshot(cwd));
+      const after = await changes.snapshot(cwd);
+      const files = await changes.diff(before, after);
       const meta = this.meta;
       if (!meta) return;
-      meta.changes = Object.fromEntries([...Object.entries(meta.changes ?? {}), [turn.uuid, files]].slice(-CHANGES_KEPT));
+      const keep = (map, value) => Object.fromEntries([...Object.entries(map ?? {}), [turn.uuid, value]].slice(-CHANGES_KEPT));
+      meta.changes = keep(meta.changes, files);
+      // The two snapshots, so one file's diff can be shown later (until git's gc clears them).
+      if (files.length && after) meta.trees = keep(meta.trees, { top: before.top, before: before.tree, after: after.tree });
       store.save();
       emit(this.id, { kind: 'changes', uuid: turn.uuid, files });
     })().catch((e) => console.error('[cc-remote] changes:', e.message));

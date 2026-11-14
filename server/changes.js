@@ -63,3 +63,9 @@ export async function diff(before, after) {
     return { path: rest.join('\t'), added: binary ? null : Number(added), removed: binary ? null : Number(removed) };
   });
 }
+
+/** One file's change between two tree ids, as a unified diff ('' when git sees it as binary). */
+export async function patch({ top, before, after }, file) {
+  const out = await git(top, ['diff', '--no-renames', '--no-color', '--no-ext-diff', '-U3', before, after, '--', file]);
+  return /^Binary files /m.test(out) ? '' : out;
+}

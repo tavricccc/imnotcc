@@ -2,6 +2,7 @@
 // Starts its own server on a spare port with a throwaway data folder.
 //   node test/smoke.mjs          (Windows folder)
 //   node test/smoke.mjs --wsl    (a folder inside WSL; Claude Code runs there)
+import crypto from 'node:crypto';
 import { execFileSync, spawn } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -61,6 +62,26 @@ try {
   check('missing image', (await image('nope.png')).status === 404);
   check('image needs login', (await fetch(`${BASE}/api/sessions/${id}/image?path=shot.png`)).status === 401);
 
+  // Files named in a reply: which exist, their text, their bytes.
+  fs.writeFileSync(path.join(local, 'README.md'), '# hi\n');
+  const resolved = (await api('POST', `/api/sessions/${id}/resolve`, { paths: ['README.md', 'shot.png', 'nope.ts', `${work}/notes.txt`, '.'] })).body?.files ?? [];
+  check('resolve kinds', resolved.map((f) => f?.kind ?? null).join() === 'markdown,image,,text,dir', JSON.stringify(resolved.map((f) => f?.kind ?? null)));
+  check('resolve gives the session path', resolved[0]?.path === (WSL ? `${work}/README.md` : path.join(work, 'README.md')), resolved[0]?.path);
+  const md = await api('GET', `/api/sessions/${id}/file?path=README.md`);
+  check('file text', md.status === 200 && md.body.text === '# hi\n');
+  check('file outside folder', (await api('GET', `/api/sessions/${id}/file?path=${encodeURIComponent(path.resolve('package.json'))}`)).body?.kind === 'text');
+  check('binary file has no text', (await api('GET', `/api/sessions/${id}/file?path=shot.png`)).body?.text === undefined);
+  check('missing file', (await api('GET', `/api/sessions/${id}/file?path=nope.ts`)).status === 404);
+  const rawText = await fetch(`${BASE}/api/sessions/${id}/raw?path=notes.txt`, { headers: { cookie } });
+  check('raw non-image is a download', rawText.status === 200 && rawText.headers.get('content-type') === 'application/octet-stream' && /attachment/.test(rawText.headers.get('content-disposition') ?? ''));
+  check('raw needs login', (await fetch(`${BASE}/api/sessions/${id}/raw?path=notes.txt`)).status === 401);
+  // A git repository, so the next turns' changes are counted and diffable.
+  const gitArgs = (args) => (WSL ? ['wsl.exe', ['-d', DISTRO, '--cd', work, '-e', 'git', ...args]] : ['git', args, { cwd: work }]);
+  for (const args of [['init', '-q'], ['add', '-A'], ['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'init']]) {
+    const [file, argv, opts] = gitArgs(args);
+    execFileSync(file, argv, { ...opts, stdio: 'ignore' });
+  }
+
   const ws = new WebSocket(`ws://127.0.0.1:${PORT}/ws`, { headers: { cookie, origin: BASE } });
   await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); });
   const events = [];
@@ -89,9 +110,15 @@ try {
   // Turn 1: bypass, a file gets written.
   sendWs({ t: 'mode', mode: 'bypassPermissions' });
   await wait((e) => e.kind === 'mode');
-  sendWs({ t: 'send', text: 'Use Bash to run: echo hi > a.txt . Then reply only DONE.' });
+  const turn1 = crypto.randomUUID();
+  sendWs({ t: 'send', uuid: turn1, text: 'Use Bash to run: echo hi > a.txt . Then reply only DONE.' });
   const r1 = await wait(isResult);
   check('bypass turn', r1.msg.subtype === 'success' && fs.existsSync(path.join(local, 'a.txt')));
+  const changed = await wait((e) => e.kind === 'changes' && e.uuid === turn1, 60_000).catch(() => null);
+  check('turn changes', changed?.files?.some((f) => f.path === 'a.txt'), JSON.stringify(changed?.files));
+  const d = await api('GET', `/api/sessions/${id}/diff?turn=${turn1}&path=a.txt`);
+  check('turn diff', d.status === 200 && /\+hi/.test(d.body?.patch ?? ''), d.body?.error);
+  check('diff of a file the turn did not change', (await api('GET', `/api/sessions/${id}/diff?turn=${turn1}&path=README.md`)).status === 404);
   check('streamed text', sawDelta);
   const ctx = await wait((e) => e.kind === 'context', 30_000).catch(() => null);
   check('context usage', !!ctx?.context?.max, ctx ? `${ctx.context.used}/${ctx.context.threshold}` : 'none');

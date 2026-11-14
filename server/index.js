@@ -14,6 +14,7 @@ import * as runners from './runner.js';
 import * as wsl from './wsl.js';
 import { pluginRoutes } from './plugins.js';
 import { claudeSettingsRoutes } from './claudeSettings.js';
+import { fileRoutes } from './files.js';
 
 store.load();
 auth.ensureAuth();
@@ -168,28 +169,7 @@ app.get('/api/sessions/:id/changes', (req, res) => {
   res.json(meta.changes ?? {});
 });
 
-// An image Claude mentioned, by its path: relative ones from the session's folder. Any image
-// file on this computer can be shown; anything that is not an image is refused.
-const IMAGE_FILES = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
-const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
-app.get('/api/sessions/:id/image', (req, res) => {
-  const meta = requireSession(req, res);
-  if (!meta) return;
-  const raw = typeof req.query.path === 'string' ? req.query.path.trim() : '';
-  if (!raw || raw.includes('\0')) return res.status(400).json({ error: '沒有路徑。' });
-  const p = pathOf(meta.cwd);
-  const home = wsl.isWsl(meta.cwd) ? wsl.homeDir() : os.homedir();
-  const named = /^~[\\/]/.test(raw) && home ? p.join(home, raw.slice(2)) : raw;
-  // A Windows path named from a WSL session is opened as it is.
-  const host = process.platform === 'win32' && /^[A-Za-z]:[\\/]/.test(named) ? path.win32.resolve(named)
-    : onHost(p.isAbsolute(named) ? p.resolve(named) : p.resolve(meta.cwd, named));
-  let real, stat;
-  try { real = fs.realpathSync(host); stat = fs.statSync(real); } catch { return res.status(404).json({ error: '找不到這張圖片。' }); }
-  const type = IMAGE_FILES[path.extname(real).toLowerCase()];
-  if (!type || !stat.isFile()) return res.status(403).json({ error: '不能開這個檔案。' });
-  if (stat.size > MAX_IMAGE_BYTES) return res.status(413).json({ error: '圖片太大。' });
-  res.sendFile(real, { dotfiles: 'allow', headers: { 'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-cache' } });
-});
+fileRoutes(app, { requireSession, wrap });
 
 app.post('/api/sessions/:id/fork',wrap(async (req, res) => {
   const meta = requireSession(req, res);
