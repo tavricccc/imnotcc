@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import {
   ArrowClockwise, ArrowsInLineVertical, CaretLeft, Check, Copy, DotsThree, GitBranch, PencilSimple,
   Sparkle, Terminal, Trash,
+  X,
 } from "@phosphor-icons/react/ssr";
 import { del, get, post } from "@/lib/api";
 import { goBack, navigate } from "@/lib/app-navigation";
@@ -27,7 +28,7 @@ import { PermissionCard, type Answer, type PermissionRequest } from "@/component
 import { ToolCard } from "@/components/tool-card";
 import { FilesCard, TurnWork } from "@/components/turn";
 import { isStep, turnRows, type FileChange } from "@/lib/turns";
-import { prefs } from "@/lib/prefs";
+import { BUSY_SEND_LABEL, prefs } from "@/lib/prefs";
 import { Meter, UsageRing } from "@/components/usage-ring";
 import { Button } from "@/ui/button";
 import type { ActionStatus } from "@/ui/button";
@@ -45,7 +46,9 @@ import { useVisualViewport } from "@/ui/use-visual-viewport";
 interface Meta { id: string; cwd: string; title?: string; temporary?: boolean }
 interface History { messages: unknown[]; start: number; total: number }
 interface Context { used: number; threshold: number; max: number; categories?: { name: string; tokens: number }[] }
+interface Queued { uuid: string; text: string; images: number }
 interface LiveState {
+  queued: Queued[];
   status: string; open: boolean; draft: string; pending: PermissionRequest[]; mode: string; model: string | null;
   effort: string | null; context: Context | null; cost: { usd: number; added: number; removed: number } | null;
 }
@@ -99,7 +102,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const [page, setPage] = React.useState({ start: initialHistory?.start ?? 0, total: initialHistory?.total ?? 0, loadingEarlier: false });
   // What each turn changed, by its prompt, as git counted it on the server.
   const [changes, setChanges] = React.useState<Record<string, FileChange[]>>({});
-  const [s, setS] = React.useState<LiveState>({ status: firstPrompt ? "running" : "idle", open: false, draft: "", pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
+  const [s, setS] = React.useState<LiveState>({ queued: [], status: firstPrompt ? "running" : "idle", open: false, draft: "", pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
   const [effortAsk, setEffortAsk] = React.useState<string | null>(null); // effort waiting for a restart to be confirmed
   const [effortStatus, setEffortStatus] = React.useState<ActionStatus>("idle");
   // What was typed but not sent stays with this session, across leaving it and reloading.
@@ -312,7 +315,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     function onEvent(m: any) {
       switch (m.kind) {
         case "snapshot":
-          setS((x) => ({ ...x, status: m.status, open: m.open, draft: m.draft, pending: m.pending, mode: m.permissionMode, model: m.model, effort: m.effort, context: m.context, cost: m.cost }));
+          setS((x) => ({ ...x, status: m.status, open: m.open, draft: m.draft, pending: m.pending, mode: m.permissionMode, model: m.model, effort: m.effort, context: m.context, cost: m.cost, queued: m.queued ?? [] }));
           // After a reconnect the socket may have missed messages: read the transcript again.
           if (snapshots++ > 0) void updateHistory().catch(() => {});
           break;
@@ -339,6 +342,27 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         case "permission-done": setS((x) => ({ ...x, pending: x.pending.filter((p) => p.id !== m.id) })); break;
         case "error": setEffortStatus("idle"); addNote(transcript.current, m.message, { error: true }); bump(); break;
         case "closed": setS((x) => ({ ...x, open: false, draft: "" })); break;
+        case "queued": setS((x) => ({ ...x, queued: m.queued })); break;
+        case "dequeued": {
+          // A held prompt went out as its own turn: it joins the transcript now.
+          const held = heldLocal.current.get(m.uuid);
+          heldLocal.current.delete(m.uuid);
+          const text = held?.text ?? m.text ?? "";
+          addPrompt(transcript.current, m.uuid, text, held?.images ?? []);
+          setS((x) => ({ ...x, status: "running" }));
+          bump("force");
+          break;
+        }
+        case "queue-returned": {
+          // Held prompts that will not be sent (a stop, a removal) go back into the composer.
+          const items = m.items as { uuid: string; text: string; images: { data: string; mediaType: string }[] }[];
+          for (const it of items) heldLocal.current.delete(it.uuid);
+          const texts = items.map((it) => it.text).filter(Boolean);
+          if (texts.length) setText((cur) => [...texts, cur].filter(Boolean).join("\n\n"));
+          const back = items.flatMap((it) => it.images.map((im) => ({ ...im, url: `data:${im.mediaType};base64,${im.data}` })));
+          if (back.length) setImages((cur) => [...cur, ...back].slice(0, 8));
+          break;
+        }
         default: break;
       }
     }
@@ -397,7 +421,14 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     input.current?.focus();
   }
 
-  function submit(raw = text) {
+  // Prompts held on the server while a turn runs, with their images, until they are sent.
+  const heldLocal = React.useRef(new Map<string, { text: string; images: PickedImage[] }>());
+  const busySend = view.busySend;
+  const otherSend = busySend === "queue" ? "steer" : "queue";
+  const [altAsk, setAltAsk] = React.useState(false);
+
+  /** `alt` sends the other way from the setting, for this one message. */
+  function submit(raw = text, alt = false) {
     const value = raw.trim();
     const fromBox = raw === text;
     const attached = fromBox ? images : [];
@@ -410,7 +441,13 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       return bump("force");
     }
     const uuid = crypto.randomUUID();
-    if (!send(id, { t: "send", uuid, text: value, images: attached.map(({ data, mediaType }) => ({ data, mediaType })) })) { note("沒有連線，訊息還留在輸入框。", { error: true }); return; }
+    const queue = running && (alt ? otherSend : busySend) === "queue";
+    if (!send(id, { t: "send", uuid, text: value, queue, images: attached.map(({ data, mediaType }) => ({ data, mediaType })) })) { note("沒有連線，訊息還留在輸入框。", { error: true }); return; }
+    if (queue) {
+      heldLocal.current.set(uuid, { text: value, images: attached });
+      if (fromBox) { setText(""); setImages([]); }
+      return;
+    }
     addPrompt(t, uuid, value, attached);
     saveArchive();
     if (fromBox) { setText(""); setImages([]); }
@@ -424,6 +461,8 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       if (e.key === "ArrowUp") { e.preventDefault(); setMenuIndex((menuIndex - 1 + slash.length) % slash.length); return; }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); pick(slash[menuIndex].name); return; }
     }
+    // Ctrl+Enter sends the other way (queue or steer) while Claude works, or just sends.
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey) && !e.nativeEvent.isComposing) { e.preventDefault(); submit(text, running); return; }
     // Enter sends on a computer; on a touch keyboard Enter is a new line and the button sends.
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing && matchMedia("(pointer: fine)").matches) { e.preventDefault(); submit(); }
     if (e.key === "Escape" && running) interrupt();
@@ -513,7 +552,18 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
               ))}
             </div>
           ) : null}
-          <Composer images={images} input={input} onChange={setText} onImages={setImages} onInterrupt={running ? interrupt : undefined} onKeyDown={onKey} placeholder="輸入訊息，或 / 叫出指令" text={text}>
+          {s.queued.length ? (
+            <ul aria-label="佇列中的訊息" className="mb-2 grid gap-1">
+              {s.queued.map((q) => (
+                <li className="flex min-w-0 items-center gap-2 rounded-tile border border-line bg-surface-solid px-3 py-1.5 text-sm" key={q.uuid}>
+                  <span className="shrink-0 text-xs text-ink-muted">佇列中</span>
+                  <span className="min-w-0 flex-1 truncate">{q.text || `${q.images} 張圖片`}</span>
+                  <button aria-label="移出佇列，放回輸入框" className="shrink-0 rounded-full p-1 text-ink-muted hover:bg-surface-hover hover:text-ink" onClick={() => send(id, { t: "unqueue", uuid: q.uuid })} type="button"><X size={14} weight="bold" /></button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <Composer images={images} input={input} onChange={setText} onImages={setImages} onInterrupt={running ? interrupt : undefined} onKeyDown={onKey} onLongPressSend={running ? () => setAltAsk(true) : undefined} placeholder={running ? `輸入訊息（送出會${BUSY_SEND_LABEL[busySend]}）` : "輸入訊息，或 / 叫出指令"} text={text}>
             <ComposerSettings disabled={!online} effort={s.effort ?? ""} effortLocked={running || effortStatus !== "idle"} mode={s.mode} model={s.model ?? ""}
               onEffort={(effort) => { if (effort === (s.effort ?? "")) return; if (s.open) setEffortAsk(effort); else send(id, { t: "effort", effort }); }} onMode={(mode) => send(id, { t: "mode", mode })} onModel={(model) => send(id, { t: "model", model })} />
           </Composer>
@@ -586,6 +636,14 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         open={sheet === "rename"}
       />
 
+      <ConfirmDialog
+        confirmLabel={`用${BUSY_SEND_LABEL[otherSend]}送出`}
+        description={otherSend === "steer" ? "這則訊息會插進 Claude 正在做的這一回合。" : "這則訊息會等這一回合結束後再送出。"}
+        onConfirm={() => { setAltAsk(false); submit(text, true); }}
+        onOpenChange={setAltAsk}
+        open={altAsk}
+        title={`這次改用「${BUSY_SEND_LABEL[otherSend]}」？`}
+      />
       <ConfirmDialog
         confirmLabel="重新啟動"
         description="Effort 只能在 Claude Code 啟動時設定。重新啟動後會接續這段對話，下一則訊息就會用新的 Effort。"

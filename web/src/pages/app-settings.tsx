@@ -392,6 +392,13 @@ export function AppSettingsPage() {
         <SwitchRow checked={view.hideWork} detail="只留你和 Claude 的對話，執行中會顯示正在用的工具" disabled={!view.bubbles} label="氣泡模式隱藏思考和工具" onChange={(v) => prefs.set({ hideWork: v })} />
       </ListGroup>
 
+      <ListGroup footer="長按送出鍵，或在電腦上按 Ctrl+Enter，可以單次改用另一種。Shift+Enter 換行。" title="Claude 工作中送出訊息">
+        <PickerRow label="預設方式" onChange={(busySend) => prefs.set({ busySend })} options={[
+          { label: "加入佇列（這回合結束後送出）", value: "queue" },
+          { label: "引導（插進目前這一回合）", value: "steer" },
+        ]} value={view.busySend} />
+      </ListGroup>
+
       <ClaudeAccountSettings />
 
       <NotificationSettings />

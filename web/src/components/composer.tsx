@@ -5,8 +5,10 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { ImagePicker, PromptImages } from "./prompt-images";
 
-export function Composer({ busy, children, disabled, images, input, locked, onChange, onImages, onInterrupt, onKeyDown, placeholder, text }: {
+export function Composer({ busy, children, disabled, images, input, locked, onChange, onImages, onInterrupt, onKeyDown, onLongPressSend, placeholder, text }: {
   busy?: boolean;
+  /** A long press on the send button calls this instead of submitting. */
+  onLongPressSend?: () => void;
   children: React.ReactNode;
   disabled?: boolean;
   images: PickedImage[];
@@ -19,6 +21,7 @@ export function Composer({ busy, children, disabled, images, input, locked, onCh
   placeholder: string;
   text: string;
 }) {
+  const longPress = useLongPress(onLongPressSend);
   const [reading, setReading] = React.useState(false);
   const [dragging, setDragging] = React.useState(false);
   const full = locked || reading || images.length >= 8;
@@ -74,9 +77,30 @@ export function Composer({ busy, children, disabled, images, input, locked, onCh
         {onInterrupt && !text.trim() && !images.length ? (
           <Button aria-label="中斷" className="ml-1 size-9" onClick={onInterrupt} size="icon" variant="primary"><Stop weight="fill" /></Button>
         ) : (
-          <Button aria-label="送出" className="ml-1 size-9" disabled={disabled || reading || (!text.trim() && !images.length)} size="icon" status={busy ? "loading" : "idle"} type="submit" variant="primary">{busy ? null : <ArrowUp weight="bold" />}</Button>
+          <Button aria-label="送出" className="ml-1 size-9 touch-none select-none" disabled={disabled || reading || (!text.trim() && !images.length)} size="icon" status={busy ? "loading" : "idle"} type="submit" variant="primary" {...longPress}>{busy ? null : <ArrowUp weight="bold" />}</Button>
         )}
       </div>
     </div>
   );
+}
+
+/** Pointer handlers that fire `onLong` after a held press and swallow the click that follows. */
+function useLongPress(onLong?: () => void) {
+  const timer = React.useRef<ReturnType<typeof setTimeout>>(undefined);
+  const fired = React.useRef(false);
+  if (!onLong) return {};
+  const clear = () => clearTimeout(timer.current);
+  return {
+    onClick: (e: React.MouseEvent) => { if (fired.current) { e.preventDefault(); fired.current = false; } },
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    onPointerDown: (e: React.PointerEvent) => {
+      if (e.button !== 0) return;
+      fired.current = false;
+      clear();
+      timer.current = setTimeout(() => { fired.current = true; navigator.vibrate?.(10); onLong(); }, 500);
+    },
+    onPointerLeave: clear,
+    onPointerUp: clear,
+    onPointerCancel: clear,
+  };
 }
