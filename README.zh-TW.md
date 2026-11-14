@@ -30,7 +30,7 @@
 - **工作中送出訊息**：可「加入佇列」等這一回合結束，或「引導」插進正在跑的回合；預設在設定裡選，長按送出（電腦用 Ctrl+Enter）單次改用另一種。
 - **App 內登入 Claude**：Claude Code 未登入或登入過期時，App 會提示並帶你完成登入，不用開終端機。
 - **擴充元件管理**：透過 `claude plugin` 檢視、安裝、移除、啟用、停用擴充元件與新增 marketplace。
-- **WSL 支援（Windows）**：路徑以 `/` 開頭的資料夾會自動在 WSL（`CC_REMOTE_WSL_DISTRO`，預設 `Ubuntu`）中執行。
+- **WSL 支援（Windows）**：路徑以 `/` 開頭的資料夾會自動在 WSL（`IMNOTCC_WSL_DISTRO`，預設 `Ubuntu`）中執行。
 - **PWA**：可安裝至 iOS／Android 主畫面。
 
 ## 架構
@@ -60,14 +60,14 @@ npm run build
 npm start
 ```
 
-首次啟動時若未設定 `CC_REMOTE_PASSWORD`，系統會自動產生一組隨機密碼並寫入 `data/password.txt`。開啟 `http://127.0.0.1:4280` 登入後，建議至「設定 → 帳號」更改密碼並刪除 `data/password.txt`。
+首次啟動時若未設定 `IMNOTCC_PASSWORD`，系統會自動產生一組隨機密碼並寫入 `data/password.txt`。開啟 `http://127.0.0.1:4280` 登入後，建議至「設定 → 帳號」更改密碼並刪除 `data/password.txt`。
 
 ## 外部連線與安全設定
 
-將 Tunnel 或反向代理指向 `http://127.0.0.1:4280`，並透過 `CC_REMOTE_ORIGINS` 指定對外網址：
+將 Tunnel 或反向代理指向 `http://127.0.0.1:4280`，並透過 `IMNOTCC_ORIGINS` 指定對外網址：
 
 ```bash
-CC_REMOTE_ORIGINS=https://cc.example.com npm start
+IMNOTCC_ORIGINS=https://cc.example.com npm start
 ```
 
 由於 `imnotcc` 等同於遠端操作本機環境，建議在 Tunnel 前端加上 **Cloudflare Access** 或 **Tailscale** 等身分驗證層，與 app 密碼形成雙層防護。詳見 [SECURITY.md](SECURITY.md)。
@@ -78,7 +78,7 @@ CC_REMOTE_ORIGINS=https://cc.example.com npm start
 
 1. 將 [scripts/run.example.cmd](scripts/run.example.cmd) 複製到 `%LOCALAPPDATA%\imnotcc\run.cmd`，再修改內容：
    - **必改：** 把 `cd /d "C:\path\to\cc-remote"` 改成你 clone `imnotcc` 的資料夾。複製後腳本已不在專案內，若用 `%~dp0..` 這類相對路徑會指到 `%LOCALAPPDATA%`，`node server\index.js` 就會啟動失敗。
-   - 修改 `CC_REMOTE_ORIGINS`。
+   - 修改 `IMNOTCC_ORIGINS`。
 2. 在 PowerShell 註冊排程工作：
 
 ```powershell
@@ -112,12 +112,14 @@ Start-ScheduledTask -TaskName 'imnotcc'
 
 | 變數 | 預設值 | 說明 |
 |---|---|---|
-| `CC_REMOTE_PORT` | `4280`（開發模式 `4290`） | 監聽的本機 port（`127.0.0.1`）。 |
-| `CC_REMOTE_ORIGINS` | — | 允許的來源網域，逗號分隔（例如 `https://cc.example.com`）。 |
-| `CC_REMOTE_DATA_DIR` | `data/`（開發模式 `data/dev/`） | 存放 `state.json` 與初始 `password.txt` 的目錄。 |
-| `CC_REMOTE_PASSWORD` | 首次啟動隨機產生 | 尚未建立帳號紀錄時的初始登入密碼。 |
-| `CC_REMOTE_WSL_DISTRO` | `Ubuntu` | Windows 上路徑為 `/` 開頭時使用的 WSL 發行版名稱。 |
+| `IMNOTCC_PORT` | `4280`（開發模式 `4290`） | 監聽的本機 port（`127.0.0.1`）。 |
+| `IMNOTCC_ORIGINS` | — | 允許的來源網域，逗號分隔（例如 `https://cc.example.com`）。 |
+| `IMNOTCC_DATA_DIR` | `data/`（開發模式 `data/dev/`） | 存放 `state.json` 與初始 `password.txt` 的目錄。 |
+| `IMNOTCC_PASSWORD` | 首次啟動隨機產生 | 尚未建立帳號紀錄時的初始登入密碼。 |
+| `IMNOTCC_WSL_DISTRO` | `Ubuntu` | Windows 上路徑為 `/` 開頭時使用的 WSL 發行版名稱。 |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | **Windows** 對話讀取 `settings.json` 與對話紀錄的 Claude Code 設定目錄。**WSL** 對話不使用此變數，而是使用 WSL 內的 `~/.claude`（經由 `//wsl.localhost/<distro>` 讀取）。 |
+
+改名為 imnotcc 之前的 `CC_REMOTE_*` 變數名稱仍然有效。
 
 ## 開發與測試
 

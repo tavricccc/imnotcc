@@ -337,7 +337,7 @@ function DesktopSettings() {
           <Field label="連接埠（Port）">
             {({ id }) => <Input id={id} max={65535} min={1} onChange={(e) => setPort(e.target.value)} required type="number" value={port} />}
           </Field>
-          <Field hint="對應 CC_REMOTE_ORIGINS，每行一個或用逗號分隔" label="允許的公開網域（Origins）">
+          <Field hint="對應 IMNOTCC_ORIGINS，每行一個或用逗號分隔" label="允許的公開網域（Origins）">
             {({ id }) => <Textarea id={id} onChange={(e) => setOrigins(e.target.value)} placeholder="https://cc.example.com" rows={3} value={origins} />}
           </Field>
           <Button size="lg" status={hostBusy ? "loading" : "idle"} type="submit" variant="primary">儲存並套用</Button>

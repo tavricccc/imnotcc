@@ -13,7 +13,7 @@ const PORT = 4291;
 const BASE = `http://127.0.0.1:${PORT}`;
 const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ccr-data-'));
 const WSL = process.argv.includes('--wsl');
-const DISTRO = process.env.CC_REMOTE_WSL_DISTRO || 'Ubuntu';
+const DISTRO = process.env.IMNOTCC_WSL_DISTRO || 'Ubuntu';
 // `work` is the session's folder; `local` is the same folder as this script opens it.
 const work = WSL ? execFileSync('wsl.exe', ['-d', DISTRO, '-e', 'mktemp', '-d', '/tmp/ccr-work-XXXXXX'], { encoding: 'utf8' }).trim()
   : fs.mkdtempSync(path.join(os.tmpdir(), 'ccr-work-'));
@@ -21,7 +21,7 @@ const local = WSL ? `//wsl.localhost/${DISTRO}${work}` : work;
 const PASSWORD = 'smoke-test-password';
 
 const server = spawn(process.execPath, ['server/index.js'], {
-  env: { ...process.env, CC_REMOTE_PORT: String(PORT), CC_REMOTE_DATA_DIR: data, CC_REMOTE_PASSWORD: PASSWORD },
+  env: { ...process.env, IMNOTCC_PORT: String(PORT), IMNOTCC_DATA_DIR: data, IMNOTCC_PASSWORD: PASSWORD },
   stdio: ['ignore', 'pipe', 'inherit'],
 });
 await new Promise((resolve, reject) => {

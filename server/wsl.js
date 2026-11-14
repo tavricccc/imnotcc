@@ -4,7 +4,7 @@
 import { execFileSync, spawn } from 'node:child_process';
 import path from 'node:path';
 
-const DISTRO = process.env.CC_REMOTE_WSL_DISTRO || 'Ubuntu';
+const DISTRO = process.env.IMNOTCC_WSL_DISTRO || 'Ubuntu';
 const ORIGINAL_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR;
 let home; // WSL's $HOME, read once; null when WSL is not there
 

@@ -5,7 +5,7 @@ import * as webpush from 'web-push';
 import * as store from './state.js';
 import * as runners from './runner.js';
 
-const SUBJECT = process.env.CC_REMOTE_PUSH_SUBJECT || 'mailto:cc-remote@example.com';
+const SUBJECT = process.env.IMNOTCC_PUSH_SUBJECT || 'mailto:imnotcc@example.com';
 
 function config() {
   const s = store.get();

@@ -37,7 +37,7 @@ pub struct Config {
     /// Port the local server listens on; change it in config.json if 4280 is taken.
     #[serde(default = "default_port")]
     pub port: u16,
-    /// Public addresses the server should accept besides its own host (CC_REMOTE_ORIGINS),
+    /// Public addresses the server should accept besides its own host (IMNOTCC_ORIGINS),
     /// e.g. a Cloudflare Tunnel hostname.
     #[serde(default)]
     pub origins: Vec<String>,
@@ -552,8 +552,24 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
+/// The app used to be "cc-remote Desktop" (identifier dev.ccremote.desktop). Move its files
+/// (config, server, data, the webview's storage) to the new identifier's folder before anything
+/// opens them, and swap its autostart entry for ours. Returns whether autostart was on.
+fn migrate_from_cc_remote() -> bool {
+    use std::os::windows::process::CommandExt;
+    let Some(base) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) else { return false };
+    let (old, new) = (base.join("dev.ccremote.desktop"), base.join("dev.imnotcc.app"));
+    if old.is_dir() && !new.exists() {
+        if let Err(e) = std::fs::rename(&old, &new) { eprintln!("[imnotcc] could not move {}: {e}", old.display()); }
+    }
+    let reg = |args: &[&str]| std::process::Command::new("reg").args(args).creation_flags(0x0800_0000).status().map(|s| s.success()).unwrap_or(false);
+    const RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+    reg(&["query", RUN, "/v", "cc-remote Desktop"]) && reg(&["delete", RUN, "/v", "cc-remote Desktop", "/f"])
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let had_autostart = migrate_from_cc_remote();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_window(app)))
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
@@ -573,8 +589,9 @@ pub fn run() {
             open_external,
             show_password
         ])
-        .setup(|app| {
+        .setup(move |app| {
             let handle = app.handle().clone();
+            if had_autostart { let _ = handle.autolaunch().enable(); }
             let config = load_config(&handle);
             app.manage(AppState { config: Mutex::new(config.clone()), server: local::Supervisor::default() });
             build_tray(&handle)?;

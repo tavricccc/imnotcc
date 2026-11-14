@@ -3,7 +3,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-const api = `http://127.0.0.1:${process.env.CC_REMOTE_PORT || 4290}`;
+const api = `http://127.0.0.1:${process.env.IMNOTCC_PORT || 4290}`;
 
 export default defineConfig({
   root: 'web',

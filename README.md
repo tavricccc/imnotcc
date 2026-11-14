@@ -30,7 +30,7 @@
 - **Sending while Claude works**: queue a message for the next turn or steer the running one; pick the default in settings, long-press send (or Ctrl+Enter) for the other.
 - **Claude sign-in in the app**: when Claude Code is signed out or its login expires, the app walks you through signing in again; no terminal needed.
 - **Plugin management: List, install, uninstall, enable, disable, and add marketplaces via `claude plugin`.
-- **WSL support (Windows)**: Folders starting with `/` run inside WSL (`CC_REMOTE_WSL_DISTRO`, default `Ubuntu`).
+- **WSL support (Windows)**: Folders starting with `/` run inside WSL (`IMNOTCC_WSL_DISTRO`, default `Ubuntu`).
 - **PWA**: Installable on iOS and Android with offline shell caching.
 
 > Note: The web UI is currently in Traditional Chinese (`zh-TW`).
@@ -62,14 +62,14 @@ npm run build
 npm start
 ```
 
-On first start, if `CC_REMOTE_PASSWORD` is not set, a random password is generated and written to `data/password.txt`. Open `http://127.0.0.1:4280`, sign in, and delete `data/password.txt` once you have saved or changed the password in **Settings → Account**.
+On first start, if `IMNOTCC_PASSWORD` is not set, a random password is generated and written to `data/password.txt`. Open `http://127.0.0.1:4280`, sign in, and delete `data/password.txt` once you have saved or changed the password in **Settings → Account**.
 
 ## Remote Access (Tunnel + Auth)
 
-Point your tunnel or reverse proxy to `http://127.0.0.1:4280` and set `CC_REMOTE_ORIGINS` to your public URL:
+Point your tunnel or reverse proxy to `http://127.0.0.1:4280` and set `IMNOTCC_ORIGINS` to your public URL:
 
 ```bash
-CC_REMOTE_ORIGINS=https://cc.example.com npm start
+IMNOTCC_ORIGINS=https://cc.example.com npm start
 ```
 
 Because `imnotcc` can execute commands on your machine, put an identity layer (such as **Cloudflare Access** or **Tailscale**) in front of the tunnel in addition to the built-in app password. See [SECURITY.md](SECURITY.md) for details.
@@ -80,7 +80,7 @@ On Windows, you can run `imnotcc` automatically at sign-in without a visible con
 
 1. Copy [scripts/run.example.cmd](scripts/run.example.cmd) to `%LOCALAPPDATA%\imnotcc\run.cmd` then edit it:
    - **Required:** change the `cd /d "C:\path\to\cc-remote"` line to the folder where you cloned `imnotcc`. Once copied, the script no longer sits inside the project, so a relative path such as `%~dp0..` would point at `%LOCALAPPDATA%` and `node server\index.js` would fail to start.
-   - Update `CC_REMOTE_ORIGINS`.
+   - Update `IMNOTCC_ORIGINS`.
 2. Register the scheduled task in PowerShell:
 
 ```powershell
@@ -114,12 +114,14 @@ Start-ScheduledTask -TaskName 'imnotcc'
 
 | Variable | Default | Description |
 |---|---|---|
-| `CC_REMOTE_PORT` | `4280` (`4290` in dev) | Port to listen on (`127.0.0.1`). |
-| `CC_REMOTE_ORIGINS` | — | Comma-separated allowed origins (e.g. `https://cc.example.com`) for API and WebSocket requests. |
-| `CC_REMOTE_DATA_DIR` | `data/` (`data/dev/` in dev) | Directory for `state.json` and initial `password.txt`. |
-| `CC_REMOTE_PASSWORD` | Random on first run | Initial login password when `state.json` has no auth record yet. |
-| `CC_REMOTE_WSL_DISTRO` | `Ubuntu` | WSL distribution used when a session folder starts with `/`. |
+| `IMNOTCC_PORT` | `4280` (`4290` in dev) | Port to listen on (`127.0.0.1`). |
+| `IMNOTCC_ORIGINS` | — | Comma-separated allowed origins (e.g. `https://cc.example.com`) for API and WebSocket requests. |
+| `IMNOTCC_DATA_DIR` | `data/` (`data/dev/` in dev) | Directory for `state.json` and initial `password.txt`. |
+| `IMNOTCC_PASSWORD` | Random on first run | Initial login password when `state.json` has no auth record yet. |
+| `IMNOTCC_WSL_DISTRO` | `Ubuntu` | WSL distribution used when a session folder starts with `/`. |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code config directory read for `settings.json` and transcripts of **Windows** sessions. **WSL** sessions ignore it and use WSL's own `~/.claude` (read through `//wsl.localhost/<distro>`). |
+
+Variables named `CC_REMOTE_*` from before the rename to imnotcc are still read.
 
 ## Development & Testing
 

@@ -4,11 +4,11 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 
-const attach = process.argv.find((a) => a.startsWith('--attach='))?.split('=')[1] || process.env.CC_REMOTE_ATTACH;
-const port = attach || process.env.CC_REMOTE_PORT || '4290';
+const attach = process.argv.find((a) => a.startsWith('--attach='))?.split('=')[1] || process.env.IMNOTCC_ATTACH;
+const port = attach || process.env.IMNOTCC_PORT || '4290';
 const env = {
-  ...process.env, CC_REMOTE_PORT: port, CC_REMOTE_DEV: '1',
-  CC_REMOTE_DATA_DIR: process.env.CC_REMOTE_DATA_DIR || path.resolve('data', 'dev'),
+  ...process.env, IMNOTCC_PORT: port, IMNOTCC_DEV: '1',
+  IMNOTCC_DATA_DIR: process.env.IMNOTCC_DATA_DIR || path.resolve('data', 'dev'),
 };
 const run = (cmd, args) => spawn(cmd, args, { stdio: 'inherit', env, shell: process.platform === 'win32' });
 const procs = [run('npx vite', [])];

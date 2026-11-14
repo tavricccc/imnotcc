@@ -106,8 +106,15 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const [effortAsk, setEffortAsk] = React.useState<string | null>(null); // effort waiting for a restart to be confirmed
   const [effortStatus, setEffortStatus] = React.useState<ActionStatus>("idle");
   // What was typed but not sent stays with this session, across leaving it and reloading.
-  const draftKey = `ccr:composer:${id}`;
-  const [text, setText] = React.useState(() => { try { return localStorage.getItem(draftKey) ?? ""; } catch { return ""; } });
+  const draftKey = `imnotcc:composer:${id}`;
+  const [text, setText] = React.useState(() => {
+    try {
+      // Drafts saved before the rename sit under the old key.
+      const old = localStorage.getItem(`ccr:composer:${id}`);
+      if (old !== null) { localStorage.removeItem(`ccr:composer:${id}`); return localStorage.getItem(draftKey) ?? old; }
+      return localStorage.getItem(draftKey) ?? "";
+    } catch { return ""; }
+  });
   React.useEffect(() => {
     try { if (text) localStorage.setItem(draftKey, text); else localStorage.removeItem(draftKey); } catch { /* storage full or blocked */ }
   }, [draftKey, text]);

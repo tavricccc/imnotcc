@@ -1,10 +1,10 @@
 [package]
-name = "cc-remote-desktop"
+name = "imnotcc"
 version = "0.2.0"
 edition = "2021"
 
 [lib]
-name = "cc_remote_desktop_lib"
+name = "imnotcc_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "cc-remote Desktop",
+  "productName": "imnotcc",
   "version": "0.2.0",
-  "identifier": "dev.ccremote.desktop",
+  "identifier": "dev.imnotcc.app",
   "build": {
     "frontendDist": "../src",
     "beforeBuildCommand": "npm --prefix .. run build"

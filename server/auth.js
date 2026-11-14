@@ -10,11 +10,11 @@ const COOKIE = 'ccr';
 const MAX_AGE_S = 60 * 60 * 24 * 30;
 const hashOf = (password, salt) => crypto.scryptSync(password, salt, 32).toString('hex');
 
-// First start: take CC_REMOTE_PASSWORD, or make one and leave it in data/password.txt.
+// First start: take IMNOTCC_PASSWORD, or make one and leave it in data/password.txt.
 export function ensureAuth() {
   const s = store.get();
   if (s.auth) return;
-  let password = process.env.CC_REMOTE_PASSWORD;
+  let password = process.env.IMNOTCC_PASSWORD;
   if (!password) {
     password = crypto.randomBytes(9).toString('base64url');
     fs.writeFileSync(path.join(DATA_DIR, 'password.txt'), `${password}\n`, { mode: 0o600 });

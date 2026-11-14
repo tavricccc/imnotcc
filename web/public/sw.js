@@ -1,5 +1,5 @@
 // Keeps the app shell so it opens instantly and offline; never caches the API or the socket.
-const CACHE = 'cc-remote-v2';
+const CACHE = 'imnotcc-v3';
 
 self.addEventListener('install', (e) => { self.skipWaiting(); e.waitUntil(caches.open(CACHE).then((c) => c.add('/'))); });
 self.addEventListener('activate', (e) => {

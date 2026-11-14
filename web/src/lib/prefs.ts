@@ -8,7 +8,9 @@ export interface Prefs { groupTools: boolean; bubbles: boolean; hideWork: boolea
 /** What sending does while Claude is working: hold it for the next turn, or slip it into this one. */
 export type BusySend = "queue" | "steer";
 export const BUSY_SEND_LABEL: Record<BusySend, string> = { queue: "加入佇列", steer: "引導" };
-const KEY = "cc-remote:prefs";
+const KEY = "imnotcc:prefs";
+// Saved under the old name before the rename to imnotcc: carried over once.
+try { const old = localStorage.getItem("cc-remote:prefs"); if (old !== null) { if (localStorage.getItem(KEY) === null) localStorage.setItem(KEY, old); localStorage.removeItem("cc-remote:prefs"); } } catch { /* storage blocked */ }
 const DEFAULTS: Prefs = { groupTools: true, bubbles: false, hideWork: false, sessionEnvironment: "win", sessionSidebarCollapsed: false, sessionSidebarWidth: 272, projectSessionLimit: "all", previewWidth: 560, busySend: "queue" };
 
 function load(): Prefs {

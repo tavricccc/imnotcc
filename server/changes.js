@@ -11,8 +11,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as wsl from './wsl.js';
 
-const DISTRO = process.env.CC_REMOTE_WSL_DISTRO || 'Ubuntu';
-const SCRATCH = 'cc-remote-index';
+const DISTRO = process.env.IMNOTCC_WSL_DISTRO || 'Ubuntu';
+const SCRATCH = 'imnotcc-index';
 
 function git(cwd, args, env = {}) {
   const base = ['-c', 'core.quotepath=false', ...args];

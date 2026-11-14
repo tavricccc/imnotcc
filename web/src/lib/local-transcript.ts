@@ -1,12 +1,41 @@
 import { isSkillContext, type Item, type Transcript } from "./transcript";
 
-function openArchive(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("cc-remote-transcripts", 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("sessions");
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
+const openDb = (name: string, create: boolean): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+  const request = indexedDB.open(name, 1);
+  request.onupgradeneeded = () => { if (create || !request.result.objectStoreNames.contains("sessions")) request.result.createObjectStore("sessions"); };
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error);
+});
+
+/** Copy what the app kept under its old name (cc-remote) into the new database, then drop the old one. */
+async function carryOver(db: IDBDatabase) {
+  const names = await indexedDB.databases?.().catch(() => []) ?? [];
+  if (!names.some((d) => d.name === "cc-remote-transcripts")) return;
+  const old = await openDb("cc-remote-transcripts", false);
+  const rows = await new Promise<{ key: IDBValidKey; value: unknown }[]>((resolve, reject) => {
+    const out: { key: IDBValidKey; value: unknown }[] = [];
+    const cursor = old.transaction("sessions").objectStore("sessions").openCursor();
+    cursor.onsuccess = () => { const c = cursor.result; if (!c) return resolve(out); out.push({ key: c.key, value: c.value }); c.continue(); };
+    cursor.onerror = () => reject(cursor.error);
   });
+  old.close();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction("sessions", "readwrite");
+    const store = tx.objectStore("sessions");
+    for (const r of rows) store.put(r.value, r.key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  indexedDB.deleteDatabase("cc-remote-transcripts");
+}
+
+// Callers close what they open, so each call opens afresh; the carry-over runs once per page.
+let carried: Promise<void> | undefined;
+async function openArchive(): Promise<IDBDatabase> {
+  const db = await openDb("imnotcc-transcripts", true);
+  carried ??= carryOver(db).catch(() => {});
+  await carried;
+  return db;
 }
 
 /** Reconcile the shared rows, retaining history that compact or pagination omitted. */
