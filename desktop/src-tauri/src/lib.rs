@@ -77,32 +77,65 @@ pub fn needs_update(app: &AppHandle, c: &Config) -> bool {
     c.local && c.installed_version.as_deref() != Some(&app.package_info().version.to_string())
 }
 
-/// Bundled setup page and configured server origins may call desktop commands.
-fn from_trusted_page(app: &AppHandle, w: &WebviewWindow) -> Result<(), String> {
+/// Who is calling a desktop command.
+#[derive(Clone, Copy, PartialEq)]
+enum Caller {
+    /// The bundled setup page: app code, trusted with everything.
+    Setup,
+    /// The configured cc-remote server's own page. It renders Claude's output and files, so a flaw
+    /// there could run script; commands that change the app or reveal secrets ask the user first
+    /// through a native dialog, which page script cannot click.
+    Web,
+}
+
+fn is_loopback(host: Option<&str>) -> bool {
+    matches!(host, Some("127.0.0.1" | "localhost"))
+}
+
+fn caller(app: &AppHandle, w: &WebviewWindow) -> Result<Caller, String> {
     let url = w.url().map_err(|e| e.to_string())?;
     if matches!(url.scheme(), "tauri") || url.host_str() == Some("tauri.localhost") {
-        return Ok(());
+        return Ok(Caller::Setup);
     }
     let cfg = app.state::<AppState>().config.lock().unwrap().clone();
-    if cfg.local {
-        let local_ok = url.scheme() == "http"
-            && matches!(url.host_str(), Some("127.0.0.1" | "localhost"))
-            && url.port_or_known_default() == Some(cfg.port);
-        if local_ok {
-            return Ok(());
-        }
+    if cfg.local && url.scheme() == "http" && is_loopback(url.host_str()) && url.port_or_known_default() == Some(cfg.port) {
+        return Ok(Caller::Web);
     }
-    if let Some(ref u) = cfg.url {
-        if let Ok(parsed) = u.parse::<tauri::Url>() {
-            if url.scheme() == parsed.scheme()
-                && url.host_str() == parsed.host_str()
-                && url.port_or_known_default() == parsed.port_or_known_default()
-            {
-                return Ok(());
-            }
+    if let Some(parsed) = cfg.url.as_deref().and_then(|u| u.parse::<tauri::Url>().ok()) {
+        let same = url.scheme() == parsed.scheme()
+            && url.host_str() == parsed.host_str()
+            && url.port_or_known_default() == parsed.port_or_known_default();
+        // Plain http to another machine can be rewritten on the way, so it gets no commands at all.
+        if same && (url.scheme() == "https" || is_loopback(url.host_str())) {
+            return Ok(Caller::Web);
         }
     }
     Err("not allowed from this page".into())
+}
+
+fn from_trusted_page(app: &AppHandle, w: &WebviewWindow) -> Result<(), String> {
+    caller(app, w).map(|_| ())
+}
+
+/// For a Web caller, ask the user natively before going on; the setup page goes straight through.
+async fn confirm(app: &AppHandle, who: Caller, message: String) -> Result<(), String> {
+    use tauri_plugin_dialog::{MessageDialogButtons, MessageDialogKind};
+    if who == Caller::Setup {
+        return Ok(());
+    }
+    let app = app.clone();
+    // blocking_show must not run on the main thread.
+    let ok = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .message(message)
+            .title("cc-remote")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom("允許".into(), "取消".into()))
+            .blocking_show()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if ok { Ok(()) } else { Err("已取消".into()) }
 }
 
 /// Where the bundled setup page lives in the webview (Windows serves app files from here).
@@ -258,7 +291,7 @@ struct StateView {
     autostart: bool,
     data_dir: String,
     log_dir: String,
-    password: Option<String>,
+    has_password: bool,
     server_running: bool,
     app_version: String,
 }
@@ -277,7 +310,7 @@ fn get_state(app: AppHandle, window: WebviewWindow) -> Result<StateView, String>
         autostart,
         data_dir: local::data_dir(&app).display().to_string(),
         log_dir: local::log_dir(&app).display().to_string(),
-        password: local::read_password(&app),
+        has_password: local::read_password(&app).is_some(),
         server_running: state.server.is_running(),
         app_version: app.package_info().version.to_string(),
     })
@@ -298,11 +331,12 @@ fn probe(url: &str) -> Result<(), String> {
 
 #[tauri::command]
 async fn use_remote(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), String> {
-    from_trusted_page(&app, &window)?;
+    let who = caller(&app, &window)?;
     let url = url.trim().trim_end_matches('/').to_string();
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("網址要以 http:// 或 https:// 開頭".into());
     }
+    confirm(&app, who, format!("要把 cc-remote 改連到這個 server 嗎？\n\n{url}\n\n本機 server 會停止。不是你自己按的話請按「取消」。")).await?;
     let u = url.clone();
     tauri::async_runtime::spawn_blocking(move || probe(&u)).await.map_err(|e| e.to_string())??;
     let state = app.state::<AppState>();
@@ -315,16 +349,37 @@ async fn use_remote(app: AppHandle, window: WebviewWindow, url: String) -> Resul
 }
 
 #[tauri::command]
-fn install_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
-    from_trusted_page(&app, &window)?;
+async fn install_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let who = caller(&app, &window)?;
+    confirm(&app, who, "要在這台電腦安裝並啟動本機 server 嗎？\n\n不是你自己按的話請按「取消」。".into()).await?;
     local::start_install(app);
     Ok(())
 }
 
 #[tauri::command]
 fn open_url(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), String> {
-    from_trusted_page(&app, &window)?;
+    // The server's page may only send the window to the configured server, not to any site.
+    if caller(&app, &window)? == Caller::Web {
+        let cfg = app.state::<AppState>().config.lock().unwrap().clone();
+        let target: tauri::Url = url.parse().map_err(|_| format!("網址格式不對：{url}"))?;
+        let ok = cfg.url.as_deref().and_then(|u| u.parse::<tauri::Url>().ok()).is_some_and(|c| c.origin() == target.origin());
+        if !ok {
+            return Err("只能開啟目前設定的 server".into());
+        }
+    }
     open_window(&app, Some(url), true)
+}
+
+/// Shows the local server's first password in a native dialog, so page script never holds it.
+#[tauri::command]
+fn show_password(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
+    let msg = match local::read_password(&app) {
+        Some(p) => format!("本機 server 的初始密碼：\n\n{p}\n\n（在網頁設定裡改過密碼的話，這裡仍是最初的密碼）"),
+        None => "這台電腦沒有設成 server，或 server 還沒啟動過。".into(),
+    };
+    app.dialog().message(msg).title("cc-remote").show(|_| {});
+    Ok(())
 }
 
 #[tauri::command]
@@ -346,7 +401,7 @@ fn clean_origin(raw: &str) -> Result<String, String> {
 
 #[tauri::command]
 async fn save_local_settings(app: AppHandle, window: WebviewWindow, port: u16, origins: Vec<String>) -> Result<Config, String> {
-    from_trusted_page(&app, &window)?;
+    let who = caller(&app, &window)?;
     if port == 0 {
         return Err("連接埠不能為 0".into());
     }
@@ -363,6 +418,8 @@ async fn save_local_settings(app: AppHandle, window: WebviewWindow, port: u16, o
     if !port_changed && old.origins == clean {
         return Ok(old);
     }
+    let listed = if clean.is_empty() { "（無）".to_string() } else { clean.join("\n") };
+    confirm(&app, who, format!("要套用新的本機 server 設定嗎？\n\n連接埠：{port}\n允許的網域：\n{listed}\n\n不是你自己按的話請按「取消」。")).await?;
     if old.local && port_changed && local::port_in_use(port) {
         return Err(format!("連接埠 {port} 已經被別的程式占用，換一個試試。"));
     }
@@ -513,7 +570,8 @@ pub fn run() {
             open_data_dir,
             open_log_dir,
             open_setup,
-            open_external
+            open_external,
+            show_password
         ])
         .setup(|app| {
             let handle = app.handle().clone();

@@ -281,16 +281,12 @@ function DesktopSettings() {
             label="連接埠與公開網域（Origins）"
             onClick={() => setHostOpen(true)}
           />
-          {st.password ? (
+          {st.has_password ? (
             <ListRow
-              detail="點擊複製初始密碼"
+              detail="在系統視窗裡顯示，網頁拿不到"
               icon={<Key />}
-              label="初始密碼"
-              onClick={() => {
-                void navigator.clipboard.writeText(st.password!);
-                toast.success("已複製初始密碼");
-              }}
-              value={st.password}
+              label="顯示初始密碼"
+              onClick={() => void tauriInvoke("show_password").catch((e) => toast.error(String(e)))}
             />
           ) : null}
           <ListRow

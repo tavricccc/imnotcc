@@ -14,7 +14,7 @@ export interface DesktopState {
   autostart: boolean;
   data_dir: string;
   log_dir: string;
-  password: string | null;
+  has_password: boolean;
   server_running: boolean;
   app_version: string;
 }

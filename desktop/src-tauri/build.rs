@@ -14,6 +14,7 @@ fn main() {
                 "open_log_dir",
                 "open_setup",
                 "open_external",
+                "show_password",
             ]),
         ),
     )
