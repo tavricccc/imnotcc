@@ -175,6 +175,35 @@ try {
   check('fork', !!fork.body.id && fork.body.id !== id);
   check('rename', (await api('POST', `/api/sessions/${id}/rename`, { title: 'smoke' })).status === 200);
   check('renamed title', (await api('GET', `/api/sessions/${id}`)).body.title === 'smoke');
+
+  // Sending while a turn runs: "queue" holds the prompt until the turn ends, then sends it.
+  sendWs({ t: 'mode', mode: 'bypassPermissions' });
+  await wait((e) => e.kind === 'mode');
+  for (let e; (e = events.find((x) => x.kind === 'queued' || x.kind === 'status'));) events.splice(events.indexOf(e), 1);
+  sendWs({ t: 'send', uuid: crypto.randomUUID(), text: 'Use Bash to run: sleep 8 . Then reply only SLEPT.' });
+  await wait((e) => e.kind === 'status' && e.status === 'running');
+  const held = crypto.randomUUID();
+  sendWs({ t: 'send', uuid: held, queue: true, text: 'Reply only QUEUED.' });
+  check('queued while running', (await wait((e) => e.kind === 'queued' && e.queued.length === 1)).queued[0].uuid === held);
+  const slept = await wait(isResult);
+  const out = await wait((e) => e.kind === 'dequeued', 30_000).catch(() => null);
+  check('held prompt waits for the turn', slept.msg.subtype === 'success' && out?.uuid === held);
+  const queuedResult = await wait(isResult);
+  check('held prompt runs as its own turn', /QUEUED/.test(queuedResult.msg.result ?? ''), queuedResult.msg.result);
+
+  // A stopped turn hands held prompts back instead of sending them.
+  events.length = 0;
+  sendWs({ t: 'send', uuid: crypto.randomUUID(), text: 'Use Bash to run: sleep 30 . Then reply only SLEPT.' });
+  await wait((e) => e.kind === 'status' && e.status === 'running');
+  const held2 = crypto.randomUUID();
+  sendWs({ t: 'send', uuid: held2, queue: true, text: 'Reply only SHOULD-NOT-RUN.' });
+  await wait((e) => e.kind === 'queued' && e.queued.length === 1);
+  await new Promise((r) => setTimeout(r, 3000));
+  sendWs({ t: 'interrupt' });
+  const back = await wait((e) => e.kind === 'queue-returned', 60_000).catch(() => null);
+  check('interrupt returns held prompts', back?.items?.[0]?.uuid === held2 && back.items[0].text === 'Reply only SHOULD-NOT-RUN.');
+  await new Promise((r) => setTimeout(r, 3000));
+  check('returned prompt was not sent', !events.some((e) => e.kind === 'dequeued'));
   ws.close();
 } catch (e) {
   console.error(e);

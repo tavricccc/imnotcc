@@ -378,9 +378,10 @@ wss.on('connection', (ws) => {
         case 'send': {
           const { text, images } = readPrompt(m);
           const uuid = typeof m.uuid === 'string' && UUID.test(m.uuid) ? m.uuid : undefined;
-          if (text || images.length) await r.send(text, images, uuid);
+          if (text || images.length) await r.send(text, images, uuid, { queue: m.queue === true });
           break;
         }
+        case 'unqueue': if (typeof m.uuid === 'string') r.unqueue(m.uuid); break;
         case 'interrupt': await r.interrupt(); break;
         case 'usage': await r.refreshUsage(); break;
         case 'mode':

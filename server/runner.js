@@ -88,6 +88,38 @@ class Runner {
     this.cost = null;
     this.draft = ''; // the reply still streaming, for a socket that joins mid-turn
     this.turn = null; // { uuid, before: snapshot | null } while a turn that started with that prompt runs
+    // Prompts sent as "queue" while a turn ran: each goes out as its own turn once the one before
+    // ends. Kept here rather than handed to Claude Code, so when they go is up to this server.
+    this.held = []; // { uuid, text, images }
+  }
+
+  heldView() { return this.held.map(({ uuid, text, images }) => ({ uuid, text, images: images.length })); }
+  emitHeld() { emit(this.id, { kind: 'queued', queued: this.heldView() }); }
+
+  /** Hand every held prompt back to the pages, which put them in the composer again. */
+  returnHeld() {
+    if (!this.held.length) return;
+    const items = this.held;
+    this.held = [];
+    emit(this.id, { kind: 'queue-returned', items });
+    this.emitHeld();
+  }
+
+  unqueue(uuid) {
+    const i = this.held.findIndex((h) => h.uuid === uuid);
+    if (i < 0) return;
+    const [item] = this.held.splice(i, 1);
+    emit(this.id, { kind: 'queue-returned', items: [item] });
+    this.emitHeld();
+  }
+
+  /** After a turn ends, start the next held prompt, if any. */
+  sendHeld() {
+    const next = this.held.shift();
+    if (!next) return;
+    this.emitHeld();
+    emit(this.id, { kind: 'dequeued', uuid: next.uuid, text: next.text });
+    this.send(next.text, next.images, next.uuid).catch((e) => emit(this.id, { kind: 'error', message: String(e?.message ?? e) }));
   }
 
   get meta() { return store.get().sessions[this.id]; }
@@ -96,7 +128,7 @@ class Runner {
   snapshot() {
     const s = store.get().settings;
     return {
-      kind: 'snapshot', status: this.status, open: !!this.q, draft: this.draft, context: this.context, cost: this.cost,
+      kind: 'snapshot', status: this.status, open: !!this.q, draft: this.draft, context: this.context, cost: this.cost, queued: this.heldView(),
       pending: [...this.pending.values()].map((p) => p.event), permissionMode: this.mode(),
       model: (this.meta?.model ?? s.model) || null, effort: (this.meta?.effort ?? s.effort) || null,
     };
@@ -150,6 +182,7 @@ class Runner {
       this.turn = null;
       this.draft = '';
       this.setStatus('idle');
+      this.returnHeld();
       emit(this.id, { kind: 'closed' });
     }
   }
@@ -175,6 +208,8 @@ class Runner {
       this.setStatus('idle');
       this.armIdle();
       this.refreshUsage();
+      // A stopped turn keeps its held prompts for the user instead of sending them on.
+      if (this.interrupted) { this.interrupted = false; this.returnHeld(); } else this.sendHeld();
     }
   }
 
@@ -207,7 +242,13 @@ class Runner {
     emit(null, { kind: 'running', session: this.id, running: status === 'running' });
   }
 
-  async send(text, images = [], uuid) {
+  /** `queue` holds the prompt until the running turn ends; otherwise it joins that turn (steer). */
+  async send(text, images = [], uuid, { queue = false } = {}) {
+    if (queue && this.status === 'running' && uuid) {
+      this.held.push({ uuid, text, images });
+      this.emitHeld();
+      return;
+    }
     clearTimeout(this.idleTimer);
     await this.restarting?.catch(() => {});
     if (!this.q) {
@@ -229,7 +270,11 @@ class Runner {
     this.wake?.();
   }
 
-  async interrupt() { if (this.q) await this.q.interrupt(); }
+  async interrupt() {
+    if (!this.q) return;
+    if (this.status === 'running') this.interrupted = true;
+    await this.q.interrupt();
+  }
 
   async setMode(mode) {
     this.meta.permissionMode = mode;
