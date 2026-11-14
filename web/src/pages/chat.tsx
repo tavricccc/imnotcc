@@ -378,10 +378,14 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     if (!m) return [];
     const q = m[1].toLowerCase();
     return (controls?.commands ?? []).filter((c) => c.name.toLowerCase().includes(q))
-      .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1) || a.name.localeCompare(b.name))
-      .slice(0, 8);
+      .sort((a, b) => (a.name.toLowerCase().startsWith(q) ? 0 : 1) - (b.name.toLowerCase().startsWith(q) ? 0 : 1) || a.name.localeCompare(b.name));
   }, [text, controls]);
   React.useEffect(() => setMenuIndex(0), [slash.length]);
+  // The whole list is shown and scrolls, so keep the keyboard choice in view.
+  const slashMenu = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    slashMenu.current?.querySelector<HTMLElement>(`[data-index="${menuIndex}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [menuIndex]);
 
   function pick(name: string) {
     setText(`/${name} `);
@@ -487,10 +491,11 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       <form className={dockSwapped.current ? "content-in" : undefined} onSubmit={(e) => { e.preventDefault(); submit(); }}>
         <div className="relative mx-auto max-w-3xl">
           {slash.length ? (
-            <div aria-label="指令" className="float-surface absolute inset-x-0 bottom-full mb-2 grid max-h-[min(20rem,calc(var(--visual-height,100dvh)*0.45))] overflow-y-auto rounded-panel border border-line bg-surface-solid p-1.5 shadow-float" data-state="open" role="listbox">
+            <div aria-label="指令" className="float-surface absolute inset-x-0 bottom-full mb-2 grid content-start overscroll-contain max-h-[min(20rem,calc(var(--visual-height,100dvh)*0.45))] overflow-y-auto rounded-panel border border-line bg-surface-solid p-1.5 shadow-float" data-state="open" ref={slashMenu} role="listbox">
               {slash.map((c, i) => (
                 <button
                   aria-selected={i === menuIndex}
+                  data-index={i}
                   className={cn("flex h-11 min-w-0 items-center gap-3 rounded-tile px-3 text-left outline-none", i === menuIndex && "bg-surface-raised")}
                   key={c.name}
                   onMouseDown={(e) => { e.preventDefault(); pick(c.name); }}
