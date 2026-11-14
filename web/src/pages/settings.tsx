@@ -13,6 +13,7 @@ import { Field, Input } from "@/ui/field";
 import { ListGroup, ListRow } from "@/ui/list";
 import { ChoiceRow, NumberRow, PickerRow, SwitchRow } from "@/ui/list-controls";
 import { prefs, SESSION_LIMITS } from "@/lib/prefs";
+import { disablePush, enablePush, push, refreshPush, testPush, type PushState } from "@/lib/push";
 import { readCompactWindows, readSessions, useCompactWindows, type ClaudeEnv, useFolders, useSettings, type Settings } from "@/lib/resources";
 import { ErrorState, LoadingList, PageHeader } from "@/ui/page";
 import { Sheet } from "@/ui/sheet";
@@ -32,6 +33,33 @@ async function saveSettings(patch: Partial<Settings>) {
 }
 
 // ---- 設定 ----
+
+const PUSH_DETAIL: Record<PushState, string> = {
+  "unsupported": "這個瀏覽器不支援推播通知",
+  "needs-install": "iPhone 要先「加入主畫面」，從主畫面打開才能開啟通知",
+  "denied": "通知被瀏覽器封鎖了，到系統或瀏覽器設定裡允許",
+  "off": "回合完成、需要你確認或發生錯誤時通知你",
+  "on": "回合完成、需要你確認或發生錯誤時通知你",
+};
+
+function NotificationSettings() {
+  const { state } = useStore(push);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => { void refreshPush(); }, []);
+  const toggle = async (on: boolean) => {
+    setBusy(true);
+    try { await (on ? enablePush() : disablePush()); }
+    catch (e) { toast.error(`通知設定失敗：${(e as Error).message}`); }
+    finally { setBusy(false); }
+  };
+  if (!state) return null;
+  return (
+    <ListGroup footer="每台裝置各自設定。正在看的 session 不會再跳通知。" title="通知">
+      <SwitchRow checked={state === "on"} detail={PUSH_DETAIL[state]} disabled={busy || (state !== "on" && state !== "off")} label="推播通知" onChange={(on) => void toggle(on)} />
+      {state === "on" ? <ListRow label="傳送測試通知" onClick={() => void testPush().catch((e) => toast.error((e as Error).message))} /> : null}
+    </ListGroup>
+  );
+}
 
 export function SettingsPage() {
   const s = useSettings();
@@ -78,6 +106,8 @@ export function SettingsPage() {
         <SwitchRow checked={view.bubbles} label="回覆用對話氣泡" onChange={(v) => prefs.set({ bubbles: v })} />
         <SwitchRow checked={view.hideWork} detail="只留你和 Claude 的對話，執行中會顯示正在用的工具" disabled={!view.bubbles} label="氣泡模式隱藏思考和工具" onChange={(v) => prefs.set({ hideWork: v })} />
       </ListGroup>
+
+      <NotificationSettings />
 
       <ProjectSessionsSettings limit={view.projectSessionLimit} />
 

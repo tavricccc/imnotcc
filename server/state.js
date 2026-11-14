@@ -11,6 +11,7 @@ const DEFAULTS = {
   folders: [],
   settings: { permissionMode: 'default', model: null, effort: null, folder: null, idleMinutes: 30 },
   auth: null, // { salt, hash, secret }
+  push: null, // { vapid: { publicKey, privateKey }, subs: [PushSubscription JSON] }
 };
 
 let state;

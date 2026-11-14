@@ -15,6 +15,7 @@ import * as wsl from './wsl.js';
 import { pluginRoutes } from './plugins.js';
 import { claudeSettingsRoutes } from './claudeSettings.js';
 import { fileRoutes } from './files.js';
+import { pushRoutes } from './push.js';
 
 store.load();
 auth.ensureAuth();
@@ -295,6 +296,7 @@ app.get('/api/controls', async (_req, res) => {
 });
 
 pluginRoutes(app, wrap);
+pushRoutes(app);
 claudeSettingsRoutes(app, wrap);
 
 app.use('/api', (err, _req, res, _next) => {
