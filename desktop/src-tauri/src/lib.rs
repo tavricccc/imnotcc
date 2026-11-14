@@ -14,12 +14,19 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
-pub const LOCAL_PORT: u16 = 4280;
-pub fn local_url() -> String {
-    format!("http://127.0.0.1:{LOCAL_PORT}")
+fn default_port() -> u16 {
+    4280
 }
 
-#[derive(Serialize, Deserialize, Default, Clone)]
+/// Port of the local server, from config.json (default 4280).
+pub fn local_port(app: &AppHandle) -> u16 {
+    app.state::<AppState>().config.lock().unwrap().port
+}
+pub fn local_url(app: &AppHandle) -> String {
+    format!("http://127.0.0.1:{}", local_port(app))
+}
+
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     /// Server the window opens. None means show the setup page.
     pub url: Option<String>,
@@ -27,6 +34,15 @@ pub struct Config {
     pub local: bool,
     /// App version whose server files are installed locally.
     pub installed_version: Option<String>,
+    /// Port the local server listens on; change it in config.json if 4280 is taken.
+    #[serde(default = "default_port")]
+    pub port: u16,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Config { url: None, local: false, installed_version: None, port: default_port() }
+    }
 }
 
 pub struct AppState {
@@ -64,14 +80,27 @@ fn from_setup_page(w: &WebviewWindow) -> Result<(), String> {
     if ok { Ok(()) } else { Err("not allowed from this page".into()) }
 }
 
-/// Show the window on `url`, or on the setup page when None. Recreated rather than navigated so
-/// going back to the setup page never depends on the platform's app-URL scheme.
+/// Where the bundled setup page lives in the webview (Windows serves app files from here).
+const SETUP_URL: &str = "http://tauri.localhost/index.html";
+
+/// Show the window on `url`, or on the setup page when None. An existing window is navigated:
+/// destroying it and building a new "main" right away fails, as the label is freed later.
 pub fn open_window(app: &AppHandle, url: Option<String>, show: bool) -> Result<(), String> {
+    let parsed: tauri::Url = match &url {
+        Some(u) => u.parse().map_err(|_| format!("網址格式不對：{u}"))?,
+        None => SETUP_URL.parse().unwrap(),
+    };
     if let Some(w) = app.get_webview_window("main") {
-        let _ = w.destroy();
+        w.navigate(parsed).map_err(|e| e.to_string())?;
+        if show {
+            let _ = w.unminimize();
+            let _ = w.show();
+            let _ = w.set_focus();
+        }
+        return Ok(());
     }
-    let target = match &url {
-        Some(u) => WebviewUrl::External(u.parse().map_err(|_| format!("網址格式不對：{u}"))?),
+    let target = match url {
+        Some(_) => WebviewUrl::External(parsed),
         None => WebviewUrl::App("index.html".into()),
     };
     let w = WebviewWindowBuilder::new(app, "main", target)
@@ -118,7 +147,7 @@ struct StateView {
 fn get_state(app: AppHandle, window: WebviewWindow) -> Result<StateView, String> {
     from_setup_page(&window)?;
     let config = app.state::<AppState>().config.lock().unwrap().clone();
-    Ok(StateView { needs_update: needs_update(&app, &config), config, node: local::node_version(), local_url: local_url() })
+    Ok(StateView { needs_update: needs_update(&app, &config), config, node: local::node_version(), local_url: local_url(&app) })
 }
 
 /// Ask `url` whether it is a cc-remote server. A Cloudflare Access login page counts: the real
@@ -262,9 +291,11 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building cc-remote")
-        .run(|app, e| {
-            if let tauri::RunEvent::Exit = e {
-                app.state::<AppState>().server.stop();
-            }
+        .run(|app, e| match e {
+            // No windows left (open_window swaps the window) is not a reason to quit: the app
+            // lives in the tray. Only an explicit exit (the tray's 結束) carries a code.
+            tauri::RunEvent::ExitRequested { code: None, api, .. } => api.prevent_exit(),
+            tauri::RunEvent::Exit => app.state::<AppState>().server.stop(),
+            _ => {}
         });
 }

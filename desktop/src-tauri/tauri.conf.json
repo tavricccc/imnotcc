@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "cc-remote",
+  "productName": "cc-remote Desktop",
   "version": "0.1.0",
   "identifier": "dev.ccremote.desktop",
   "build": {

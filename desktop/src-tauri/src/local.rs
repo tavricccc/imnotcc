@@ -1,6 +1,6 @@
 // Running cc-remote's server on this PC: install it from the bundled files with the system's
 // Node.js, keep it running (restart when it dies), and stop exactly the process tree we started.
-use crate::{base_dir, local_url, needs_update, open_window, save_config, AppState, LOCAL_PORT};
+use crate::{base_dir, local_url, needs_update, open_window, save_config, local_port, AppState};
 use serde::Serialize;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -51,17 +51,51 @@ pub fn node_version() -> Result<String, String> {
     Ok(v)
 }
 
-fn port_in_use() -> bool {
-    let addr: SocketAddr = ([127, 0, 0, 1], LOCAL_PORT).into();
+/// One job object for the app's lifetime, set to kill everything in it when its last handle
+/// closes. The server and the Claude Code processes it starts join it, so they die with the app
+/// even when the app is killed or crashes, and never linger holding the port.
+fn job() -> Option<usize> {
+    use std::sync::OnceLock;
+    use windows_sys::Win32::System::JobObjects::*;
+    static JOB: OnceLock<Option<usize>> = OnceLock::new();
+    *JOB.get_or_init(|| unsafe {
+        let h = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if h.is_null() {
+            return None;
+        }
+        let mut info: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        let ok = SetInformationJobObject(
+            h,
+            JobObjectExtendedLimitInformation,
+            &info as *const _ as *const _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        );
+        if ok == 0 { None } else { Some(h as usize) }
+    })
+}
+
+fn join_job(child: &std::process::Child) -> bool {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::System::JobObjects::AssignProcessToJobObject;
+    match job() {
+        Some(j) => unsafe { AssignProcessToJobObject(j as _, child.as_raw_handle() as _) != 0 },
+        None => false,
+    }
+}
+
+fn port_in_use(port: u16) -> bool {
+    let addr: SocketAddr = ([127, 0, 0, 1], port).into();
     TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
 }
 
 /// Wait until the server answers /api/me.
-pub fn wait_ready(timeout: Duration) -> bool {
+pub fn wait_ready(app: &AppHandle, timeout: Duration) -> bool {
+    let url = format!("{}/api/me", local_url(app));
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(2)).build();
     let end = Instant::now() + timeout;
     while Instant::now() < end {
-        if agent.get(&format!("{}/api/me", local_url())).call().is_ok() {
+        if agent.get(&url).call().is_ok() {
             return true;
         }
         thread::sleep(Duration::from_millis(300));
@@ -86,10 +120,11 @@ impl Supervisor {
             if s.want {
                 return;
             }
-            if port_in_use() {
+            let port = local_port(app);
+            if port_in_use(port) {
                 drop(s);
                 app.dialog()
-                    .message(format!("連接埠 {LOCAL_PORT} 已經被別的程式占用（可能是另一個 cc-remote），本機 server 沒有啟動。"))
+                    .message(format!("連接埠 {port} 已經被別的程式占用（可能是另一個 cc-remote），本機 server 沒有啟動。\n可以在 {} 的 config.json 改 port。", base_dir(app).display()))
                     .title("cc-remote")
                     .kind(MessageDialogKind::Error)
                     .show(|_| {});
@@ -124,13 +159,16 @@ impl Supervisor {
                 .arg(app_dir(app).join("server").join("index.js"))
                 .current_dir(app_dir(app))
                 .env("CC_REMOTE_DATA_DIR", data_dir(app))
-                .env("CC_REMOTE_PORT", LOCAL_PORT.to_string())
+                .env("CC_REMOTE_PORT", local_port(app).to_string())
                 .stdin(Stdio::null())
                 .stdout(out)
                 .stderr(err)
                 .spawn();
             match child {
                 Ok(mut c) => {
+                    if !join_job(&c) {
+                        note(&log_path, "[cc-remote desktop] could not tie the server to the app; it may outlive a crash");
+                    }
                     self.0.lock().unwrap().pid = Some(c.id());
                     let status = c.wait();
                     self.0.lock().unwrap().pid = None;
@@ -216,7 +254,7 @@ pub fn start_install(app: AppHandle) {
             ok: result.is_ok(),
             error: result.err(),
             password: read_password(&app),
-            url: local_url(),
+            url: local_url(&app),
             log: log_path.display().to_string(),
         };
         INSTALLING.store(false, Ordering::SeqCst);
@@ -279,7 +317,7 @@ fn install(app: &AppHandle, log_path: &Path) -> Result<(), String> {
     let c = {
         let mut c = state.config.lock().unwrap();
         c.local = true;
-        c.url = Some(local_url());
+        c.url = Some(format!("http://127.0.0.1:{}", c.port));
         c.installed_version = Some(app.package_info().version.to_string());
         c.clone()
     };
@@ -288,7 +326,7 @@ fn install(app: &AppHandle, log_path: &Path) -> Result<(), String> {
 
     say("啟動本機 server…");
     state.server.start(app);
-    if !wait_ready(Duration::from_secs(30)) {
+    if !wait_ready(app, Duration::from_secs(30)) {
         return Err(format!("server 30 秒內沒有回應，請看 {}", log_dir(app).join("server.log").display()));
     }
     say("完成。");
@@ -300,7 +338,7 @@ pub fn start_and_open(app: &AppHandle, show: bool) {
     app.state::<AppState>().server.start(app);
     let app = app.clone();
     thread::spawn(move || {
-        let ready = wait_ready(Duration::from_secs(30));
+        let ready = wait_ready(&app, Duration::from_secs(30));
         let url = app.state::<AppState>().config.lock().unwrap().url.clone();
         let a = app.clone();
         let _ = app.run_on_main_thread(move || {
