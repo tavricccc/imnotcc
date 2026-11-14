@@ -8,7 +8,7 @@ import * as wsl from './wsl.js';
 import * as changes from './changes.js';
 
 const runners = new Map();
-const CHANGES_KEPT = 200; // turns per session whose changes are remembered
+const CHANGES_KEPT = 1; // only the latest turn's changes are remembered; the next turn replaces them
 const listeners = new Set(); // (sessionId | null, event) => void; null = for everyone
 let planUsage = null;
 let cachedControls = null; // slash commands and models, as last read from a running session
@@ -228,7 +228,8 @@ class Runner {
       if (!meta) return;
       const keep = (map, value) => Object.fromEntries([...Object.entries(map ?? {}), [turn.uuid, value]].slice(-CHANGES_KEPT));
       meta.changes = keep(meta.changes, files);
-      // The two snapshots, so one file's diff can be shown later (until git's gc clears them).
+      if (!files.length || !after) delete meta.trees;
+      // The two snapshots, so one file's diff can be shown later (until the next turn replaces them or git's gc clears them).
       if (files.length && after) meta.trees = keep(meta.trees, { top: before.top, before: before.tree, after: after.tree });
       store.save();
       emit(this.id, { kind: 'changes', uuid: turn.uuid, files });

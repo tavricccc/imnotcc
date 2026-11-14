@@ -21,6 +21,8 @@ export function load() {
   let saved = {};
   try { saved = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (e) { if (e.code !== 'ENOENT') throw e; }
   state = { ...structuredClone(DEFAULTS), ...saved, settings: { ...DEFAULTS.settings, ...saved.settings } };
+  // Per-turn change records only matter for the run that made them; a fresh start drops them.
+  for (const meta of Object.values(state.sessions)) { delete meta.changes; delete meta.trees; }
   return state;
 }
 
