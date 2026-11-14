@@ -58,7 +58,7 @@ export function Thumb({ className, src }: { className?: string; src: string | st
   if (!current) return null;
   return (
     <button className={cn("shrink-0 overflow-hidden rounded-tile shadow-panel outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]", className)} onClick={() => openImage(current)} type="button">
-      <img alt="" className="block max-h-48 max-w-full object-contain" loading="lazy" onError={() => setTried(tried + 1)} src={current} />
+      <img alt="" className="block size-20 object-cover" loading="lazy" onError={() => setTried(tried + 1)} src={current} />
     </button>
   );
 }

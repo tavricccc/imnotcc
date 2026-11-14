@@ -49,7 +49,7 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 .markdown-body { overflow-wrap: anywhere; line-height: 1.6; }
 .markdown-body > :first-child { margin-top: 0; }
 .markdown-body > :last-child { margin-bottom: 0; }
-.markdown-body img { display: block; max-width: 100%; max-height: 24rem; margin: 0.5rem 0; border-radius: var(--radius-tile, 0.75rem); cursor: zoom-in; }
+.markdown-body img { display: block; width: 5rem; height: 5rem; object-fit: cover; margin: 0.5rem 0; border-radius: var(--radius-tile, 0.75rem); cursor: zoom-in; }
 .markdown-body p { margin-block: 0.625rem; }
 .markdown-body :is(h1, h2, h3, h4) { margin-block: 1.25rem 0.5rem; color: var(--ink); font-weight: 650; letter-spacing: -0.01em; }
 .markdown-body h1 { font-size: 1.25rem; }

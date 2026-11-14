@@ -607,8 +607,8 @@ function Entry({ bubbles, item }: { bubbles: boolean; item: Item }) {
       if (item.image) {
         const src = item.image;
         return (
-          <button className="content-in min-w-0 max-w-[70%] cursor-zoom-in justify-self-end overflow-hidden rounded-[1.25rem]" onClick={() => openImage(src)} type="button">
-            <img alt="" className="block max-h-64 max-w-full object-cover" src={src} />
+          <button className="content-in size-20 shrink-0 cursor-zoom-in justify-self-end overflow-hidden rounded-tile shadow-panel" onClick={() => openImage(src)} type="button">
+            <img alt="" className="block size-full object-cover" src={src} />
           </button>
         );
       }
