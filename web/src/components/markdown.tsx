@@ -49,6 +49,15 @@ export function Markdown({ className, text }: { className?: string; text: string
   const session = React.useContext(SessionContext);
   const { html, previews } = React.useMemo(() => render(text, session), [text, session]);
   const body = React.useRef<HTMLDivElement>(null);
+  // Written by hand, and only when it changed: React re-applied the same dangerouslySetInnerHTML
+  // on unrelated re-renders while a turn ran, which replaced the text and dropped any selection.
+  const written = React.useRef<string | null>(null);
+  React.useLayoutEffect(() => {
+    const el = body.current;
+    if (!el || written.current === html) return;
+    el.innerHTML = html;
+    written.current = html;
+  }, [html]);
   React.useEffect(() => {
     const el = body.current;
     if (!el) return;
@@ -63,7 +72,6 @@ export function Markdown({ className, text }: { className?: string; text: string
     <div className={cn("grid min-w-0 gap-2", className)}>
       <div
         className="markdown-body min-w-0 text-[0.9375rem] text-ink"
-        dangerouslySetInnerHTML={{ __html: html }}
         data-selectable=""
         onClick={(event) => {
           const target = event.target as HTMLElement;
