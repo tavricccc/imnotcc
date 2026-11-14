@@ -6,6 +6,10 @@ import { toolSummary, type Item } from "@/lib/transcript";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { Thumb } from "./lightbox";
+import { FileIcon } from "./file-icon";
+import { SessionContext } from "@/lib/session-images";
+import { resolveFile, type FileInfo } from "@/lib/file-mentions";
+import { openPreview } from "@/lib/preview";
 
 const LIMIT = 4000;
 // Allow wheel scrolling to reach the chat when a tool's input or output reaches its edge.
@@ -71,6 +75,7 @@ export function ToolDetail({ tool }: { tool: Item }) {
   const result = tool.result ?? "";
   return (
     <div className="grid min-w-0 gap-2" data-selectable="">
+      {typeof tool.input?.file_path === "string" ? <OpenFile path={tool.input.file_path} /> : null}
       <pre className={codeClass}>{inputText(tool)}</pre>
       {tool.done && (result || !tool.images?.length) ? (
         <pre className={cn(codeClass, tool.error && "text-danger")}>{(full || result.length <= LIMIT ? result : `${result.slice(0, LIMIT)}…`) || "（沒有輸出）"}</pre>
@@ -79,6 +84,24 @@ export function ToolDetail({ tool }: { tool: Item }) {
         <Button className="justify-self-start" onClick={() => setFull(true)} size="sm" variant="ghost">顯示全部</Button>
       ) : null}
     </div>
+  );
+}
+
+/** The file a tool read or wrote, opened in the preview panel; nothing when it is not there any more. */
+function OpenFile({ path }: { path: string }) {
+  const session = React.useContext(SessionContext);
+  const [info, setInfo] = React.useState<FileInfo | null>(null);
+  React.useEffect(() => {
+    let live = true;
+    if (session) void resolveFile(session, path).then((f) => { if (live) setInfo(f && f.kind !== "dir" ? f : null); });
+    return () => { live = false; };
+  }, [session, path]);
+  if (!session || !info) return null;
+  return (
+    <Button className="max-w-full justify-self-start" onClick={() => openPreview({ kind: "file", session, path: info.path })} size="sm" title={info.path} variant="secondary">
+      <FileIcon className="size-4 shrink-0" kind={info.kind} name={info.name} />
+      <span className="truncate">打開 {info.name}</span>
+    </Button>
   );
 }
 
