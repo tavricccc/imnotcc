@@ -59,14 +59,14 @@ function arrangeModels(models: Model[], current: string): { main: ModelOption[];
   return { main, more };
 }
 
-/** A face for each level, so the choice reads as a feeling rather than a word. */
-const EFFORT_MOOD: Record<string, { icon: string; text: string }> = {
-  "": { icon: "✨", text: "交給 Claude 決定" },
-  low: { icon: "⚡", text: "快速回答，不多想" },
-  medium: { icon: "🙂", text: "剛剛好" },
-  high: { icon: "🧠", text: "認真想一想" },
-  xhigh: { icon: "🔥", text: "全力以赴" },
-  max: { icon: "🚀", text: "火力全開，慢一點也值得" },
+/** One-line description per level. "" is whatever the computer's own Claude Code settings (modelSettings) say. */
+const EFFORT_MOOD: Record<string, { text: string }> = {
+  "": { text: "沿用電腦上的全域設定" },
+  low: { text: "快速回答，不多想" },
+  medium: { text: "剛剛好" },
+  high: { text: "認真想一想" },
+  xhigh: { text: "全力以赴" },
+  max: { text: "火力全開，慢一點也值得" },
 };
 
 /** Effort as a slider over what this model offers, "預設" first. Commits when the thumb is let go. */
@@ -79,14 +79,13 @@ function EffortSlider({ disabled, effort, levels, onEffort }: { disabled?: boole
   React.useEffect(() => { setDraft(index); sent.current = effort; }, [index, effort]);
   const commit = () => { if (steps[draft] !== sent.current) { sent.current = steps[draft]; onEffort(steps[draft]); } };
   const label = (v: string) => EFFORTS.find((e) => e.value === v)?.label ?? v;
-  const mood = EFFORT_MOOD[steps[draft]] ?? { icon: "", text: label(steps[draft]) };
+  const mood = EFFORT_MOOD[steps[draft]] ?? { text: label(steps[draft]) };
   const pct = steps.length > 1 ? (draft / (steps.length - 1)) * 100 : 0;
   return (
     <div className="grid gap-1.5 px-1">
       <div className="flex items-center justify-between gap-3">
         <span className="text-sm font-medium">Effort</span>
         <span aria-live="polite" className="effort-pop flex items-center gap-1.5 text-sm" key={draft}>
-          <span aria-hidden className="text-base leading-none">{mood.icon}</span>
           <span className="font-semibold text-contrast">{label(steps[draft])}</span>
           <span className="text-ink-muted">· {mood.text}</span>
         </span>
