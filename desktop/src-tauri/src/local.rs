@@ -155,11 +155,13 @@ impl Supervisor {
                 Err(_) => (Stdio::null(), Stdio::null()),
             };
             let started = Instant::now();
+            let origins = app.state::<AppState>().config.lock().unwrap().origins.join(",");
             let child = hidden("node")
                 .arg(app_dir(app).join("server").join("index.js"))
                 .current_dir(app_dir(app))
                 .env("CC_REMOTE_DATA_DIR", data_dir(app))
                 .env("CC_REMOTE_PORT", local_port(app).to_string())
+                .env("CC_REMOTE_ORIGINS", origins)
                 .stdin(Stdio::null())
                 .stdout(out)
                 .stderr(err)

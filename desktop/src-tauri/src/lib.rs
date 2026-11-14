@@ -37,11 +37,15 @@ pub struct Config {
     /// Port the local server listens on; change it in config.json if 4280 is taken.
     #[serde(default = "default_port")]
     pub port: u16,
+    /// Public addresses the server should accept besides its own host (CC_REMOTE_ORIGINS),
+    /// e.g. a Cloudflare Tunnel hostname.
+    #[serde(default)]
+    pub origins: Vec<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { url: None, local: false, installed_version: None, port: default_port() }
+        Config { url: None, local: false, installed_version: None, port: default_port(), origins: Vec::new() }
     }
 }
 
