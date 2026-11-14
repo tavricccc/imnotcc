@@ -1,7 +1,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import { ArrowsInLineVertical, Clock, FolderSimple, FolderSimplePlus, Key, Plus, SignOut, SlidersHorizontal, Trash, X } from "@phosphor-icons/react/ssr";
-import { auth, del, get, post, put } from "@/lib/api";
+import { auth, del, post, put } from "@/lib/api";
 import { clearCache } from "@/lib/cache";
 import { EFFORTS, MODES, WINDOWS, baseName, modeLabel, tokens } from "@/lib/format";
 import { removeLocalTranscripts } from "@/lib/local-transcript";
@@ -13,7 +13,7 @@ import { Field, Input } from "@/ui/field";
 import { ListGroup, ListRow } from "@/ui/list";
 import { ChoiceRow, NumberRow, PickerRow, SwitchRow } from "@/ui/list-controls";
 import { prefs, SESSION_LIMITS } from "@/lib/prefs";
-import { readSessions, useCompactWindows, useFolders, useSettings, type Settings } from "@/lib/resources";
+import { readCompactWindows, readSessions, useCompactWindows, type ClaudeEnv, useFolders, useSettings, type Settings } from "@/lib/resources";
 import { ErrorState, LoadingList, PageHeader } from "@/ui/page";
 import { Sheet } from "@/ui/sheet";
 
@@ -58,7 +58,7 @@ export function SettingsPage() {
   const error = s.error || f.error || w.error;
   const retry = () => { void s.reload(); void f.reload(); void w.reload(); };
   // A failed read still leaves the device settings usable, so only the server's own groups stop.
-  const set = win?.filter((x) => x.window).length ?? 0;
+  const set = win?.windows.filter((x) => x.window).length ?? 0;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader title="設定" />
@@ -317,41 +317,52 @@ function AddFolderSheet({ onAdded, onOpenChange, open }: { onAdded: (folders: st
 
 export function CompactPage() {
   const res = useCompactWindows();
-  const [editing, setEditing] = React.useState<string | null>(null);
-  const [newModel, setNewModel] = React.useState("");
+  const [editing, setEditing] = React.useState<{ env: ClaudeEnv; model: string } | null>(null);
+  const [newModel, setNewModel] = React.useState<Partial<Record<ClaudeEnv, string>>>({});
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader back={{ href: "/settings", label: "設定" }} description="寫在 Claude Code 的 settings.json，電腦上也一起生效。" title="自動壓縮門檻" />
+      <PageHeader back={{ href: "/settings", label: "設定" }} description="寫在 Claude Code 的 settings.json，電腦上也一起生效。Windows 和 WSL 各有自己的 settings.json，分開設定。" title="自動壓縮門檻" />
       {res.error ? <ErrorState message={res.error} onRetry={res.reload} retryLabel="重試" title="讀不到門檻" />
         : !res.data ? <LoadingList label="載入中" rows={2} />
         : (
           <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-            <ListGroup title="模型">
-              {res.data.map((w) => (
-                <ListRow icon={<Clock />} key={w.model} label={w.model} onClick={() => setEditing(w.model)} value={w.window ? tokens(w.window) : "預設"} />
-              ))}
-            </ListGroup>
-            <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); if (newModel.trim()) setEditing(newModel.trim()); }}>
-              <Field hint="清單裡沒有的模型，打它的名稱來設定。" label="其他模型">
-                {({ describedBy, id }) => <Input aria-describedby={describedBy} id={id} onChange={(e) => setNewModel(e.target.value)} placeholder="例如 claude-haiku-5-5" spellCheck={false} value={newModel} />}
-              </Field>
-              <Button className="justify-self-end" disabled={!newModel.trim()} type="submit">設定</Button>
-            </form>
+            {res.data.envs.map((env) => {
+              const rows = res.data!.windows.filter((w) => w.env === env);
+              const typed = newModel[env] ?? "";
+              return (
+                <div className="grid grid-cols-[minmax(0,1fr)] gap-3" key={env}>
+                  <ListGroup footer={env === "wsl" ? "WSL 裡的 ~/.claude/settings.json，WSL session 使用。" : "Windows 的 ~/.claude/settings.json，Windows session 使用。"} title={ENV_LABEL[env]}>
+                    {rows.length ? rows.map((w) => (
+                      <ListRow icon={<Clock />} key={w.model} label={w.model} onClick={() => setEditing({ env, model: w.model })} value={w.window ? tokens(w.window) : "預設"} />
+                    )) : <ListRow icon={<Clock />} label="還沒有設定過的模型" />}
+                  </ListGroup>
+                  <form className="grid gap-3" onSubmit={(e) => { e.preventDefault(); if (typed.trim()) setEditing({ env, model: typed.trim() }); }}>
+                    <Field hint={`清單裡沒有的模型，打它的名稱來設定 ${ENV_LABEL[env]} 的門檻。`} label="其他模型">
+                      {({ describedBy, id }) => <Input aria-describedby={describedBy} id={id} onChange={(e) => setNewModel((m) => ({ ...m, [env]: e.target.value }))} placeholder="例如 claude-haiku-5-5" spellCheck={false} value={typed} />}
+                    </Field>
+                    <Button className="justify-self-end" disabled={!typed.trim()} type="submit">設定</Button>
+                  </form>
+                </div>
+              );
+            })}
           </div>
         )}
 
       <ModelWindowSheet
-        current={res.data?.find((w) => w.model === editing)?.window}
-        model={editing}
-        onDone={async () => { res.setData((await get("/api/compact-windows")).windows); setNewModel(""); }}
+        current={res.data?.windows.find((w) => w.env === editing?.env && w.model === editing?.model)?.window}
+        env={editing?.env ?? "win"}
+        model={editing?.model ?? null}
+        onDone={async () => { const env = editing?.env; res.setData(await readCompactWindows()); if (env) setNewModel((m) => ({ ...m, [env]: "" })); }}
         onOpenChange={(o) => { if (!o) setEditing(null); }}
       />
     </div>
   );
 }
 
-function ModelWindowSheet({ current, model, onDone, onOpenChange }: { current?: number; model: string | null; onDone: () => Promise<void>; onOpenChange: (o: boolean) => void }) {
+const ENV_LABEL: Record<ClaudeEnv, string> = { win: "Windows", wsl: "WSL" };
+
+function ModelWindowSheet({ current, env, model, onDone, onOpenChange }: { current?: number; env: ClaudeEnv; model: string | null; onDone: () => Promise<void>; onOpenChange: (o: boolean) => void }) {
   const [custom, setCustom] = React.useState("");
   const [busy, setBusy] = React.useState<string | null>(null);
   const [reply, setReply] = React.useState("");
@@ -363,7 +374,7 @@ function ModelWindowSheet({ current, model, onDone, onOpenChange }: { current?: 
     setBusy(size);
     setReply("");
     try {
-      const r = await post("/api/compact-windows", { model, size });
+      const r = await post("/api/compact-windows", { env, model, size });
       setReply(r.reply);
       await onDone();
     } catch (e) { setReply((e as Error).message); } finally { setBusy(null); }
@@ -371,7 +382,7 @@ function ModelWindowSheet({ current, model, onDone, onOpenChange }: { current?: 
 
   const currentLabel = current ? tokens(current) : null;
   return (
-    <Sheet description="在背景執行 /autocompact，要等幾秒。" onOpenChange={onOpenChange} open={model !== null} title={shown.current ?? ""}>
+    <Sheet description="在背景執行 /autocompact，要等幾秒。" onOpenChange={onOpenChange} open={model !== null} title={shown.current ? `${shown.current}（${ENV_LABEL[env]}）` : ""}>
       <div className="grid gap-5 pb-2">
         <ListGroup label="門檻" role="radiogroup">
           {WINDOWS.map((w) => (
