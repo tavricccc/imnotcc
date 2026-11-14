@@ -7,7 +7,7 @@ export interface PlanWindow { pct: number; resetsAt?: string }
 export interface Plan { fiveHour?: PlanWindow; sevenDay?: PlanWindow }
 export interface Controls {
   commands: { name: string; description?: string; argumentHint?: string }[];
-  models: { value: string; displayName?: string; description?: string }[];
+  models: { value: string; displayName?: string; description?: string; resolvedModel?: string; supportsEffort?: boolean; supportedEffortLevels?: string[] }[];
 }
 
 export const shared = createStore<{ plan: Plan | null; controls: Controls | null; running: Record<string, boolean> }>({
