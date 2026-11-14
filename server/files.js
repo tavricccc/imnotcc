@@ -160,7 +160,7 @@ export function fileRoutes(app, { requireSession, wrap }) {
 
   app.get('/preview/:token/*rest', (req, res) => {
     const grant = grants.get(req.params.token);
-    if (!grant || grant.expires < Date.now()) return res.status(404).type('text/plain').send('這個預覽連結已經過期，回到 cc-remote 再開一次。');
+    if (!grant || grant.expires < Date.now()) return res.status(404).type('text/plain').send('這個預覽連結已經過期，回到 imnotcc 再開一次。');
     grant.expires = Date.now() + GRANT_MS;
     const rel = [].concat(req.params.rest ?? []).join('/');
     let real;

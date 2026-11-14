@@ -31,6 +31,6 @@ export function startShared() {
 
 /** Commands that only work as a terminal menu: on the phone they point to a screen instead. */
 export const TERMINAL_ONLY: Record<string, string | null> = {
-  config: "設定", plugin: "Plugin", plugins: "Plugin", login: null, logout: null, resume: null, exit: null,
+  config: "設定", plugin: "擴充元件", plugins: "擴充元件", login: null, logout: null, resume: null, exit: null,
   quit: null, vim: null, terminal: null, "terminal-setup": null, ide: null, theme: null, doctor: null, permissions: null,
 };

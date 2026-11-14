@@ -27,7 +27,7 @@ async function saveSettings(patch: Partial<Settings>) {
   }
 }
 
-// ---- Agent 設定 ----
+// ---- Claude 設定 ----
 
 export function SettingsPage() {
   const s = useSettings();
@@ -53,13 +53,13 @@ export function SettingsPage() {
   const set = win?.windows?.filter((x) => x.window).length ?? 0;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader title="Agent 設定" />
+      <PageHeader title="Claude 設定" />
       {error ? <ErrorState message={error} onRetry={retry} retryLabel="重試" title="讀不到設定" /> : null}
 
       {!st && !error ? <LoadingList label="載入中" rows={1} /> : null}
       {st && fold && win ? (
-        <ListGroup footer="已經開著的 session 用自己的設定，在 session 的選項裡改。" title="Claude Code">
-          <ListRow detail={`${modeLabel(st.permissionMode)} · ${st.model || "預設模型"}`} href="/settings/defaults" icon={<SlidersHorizontal />} label="新 session 的預設值" />
+        <ListGroup footer="已經開著的對話用自己的設定，在對話的選項裡改。" title="Claude Code">
+          <ListRow detail={`${modeLabel(st.permissionMode)} · ${st.model || "預設模型"}`} href="/settings/defaults" icon={<SlidersHorizontal />} label="新對話的預設值" />
           <ListRow href="/settings/folders" icon={<FolderSimple />} label="資料夾" value={`${fold.length} 個`} />
           <ListRow href="/settings/compact" icon={<ArrowsInLineVertical />} label="自動壓縮門檻" value={set ? `${set} 個模型` : "預設"} />
         </ListGroup>
@@ -99,7 +99,7 @@ export function DefaultsPage() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader back={{ href: "/settings", label: "Agent 設定" }} description="開新 session 時先用這些，之後可以在 session 裡改。" title="新 session 的預設值" />
+      <PageHeader back={{ href: "/settings", label: "Claude 設定" }} description="開新對話時先用這些，之後可以在對話裡改。" title="新對話的預設值" />
       {error ? <ErrorState message={error} onRetry={() => { void s.reload(); void f.reload(); }} retryLabel="重試" title="讀不到設定" />
         : !d ? <LoadingList label="載入中" rows={2} />
         : (
@@ -142,13 +142,13 @@ export function FoldersPage() {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         actions={<Button aria-label="加入資料夾" onClick={() => setAddOpen(true)} size="icon" variant="primary"><Plus weight="bold" /></Button>}
-        back={{ href: "/settings", label: "Agent 設定" }}
+        back={{ href: "/settings", label: "Claude 設定" }}
         title="資料夾"
       />
       {res.error ? <ErrorState message={res.error} onRetry={res.reload} retryLabel="重試" title="讀不到資料夾" />
         : !res.data ? <LoadingList label="載入中" rows={2} />
         : (
-          <ListGroup footer="新 session 從這些資料夾裡選。移除只是從清單拿掉，不會刪任何東西。">
+          <ListGroup footer="新對話從這些資料夾裡選。移除只是從清單拿掉，不會刪任何東西。">
             {res.data.map((f) => (
               <ListRow
                 detail={f}
@@ -215,7 +215,7 @@ export function CompactPage() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader back={{ href: "/settings", label: "Agent 設定" }} description="寫在 Claude Code 的 settings.json，電腦上也一起生效。Windows 和 WSL 各有自己的 settings.json，分開設定。" title="自動壓縮門檻" />
+      <PageHeader back={{ href: "/settings", label: "Claude 設定" }} description="寫在 Claude Code 的 settings.json，電腦上也一起生效。Windows 和 WSL 各有自己的 settings.json，分開設定。" title="自動壓縮門檻" />
       {res.error ? <ErrorState message={res.error} onRetry={res.reload} retryLabel="重試" title="讀不到門檻" />
         : !res.data ? <LoadingList label="載入中" rows={2} />
         : (
@@ -225,7 +225,7 @@ export function CompactPage() {
               const typed = newModel[env] ?? "";
               return (
                 <div className="grid grid-cols-[minmax(0,1fr)] gap-3" key={env}>
-                  <ListGroup footer={env === "wsl" ? "WSL 裡的 ~/.claude/settings.json，WSL session 使用。" : "Windows 的 ~/.claude/settings.json，Windows session 使用。"} title={ENV_LABEL[env]}>
+                  <ListGroup footer={env === "wsl" ? "WSL 裡的 ~/.claude/settings.json，WSL 對話使用。" : "Windows 的 ~/.claude/settings.json，Windows 對話使用。"} title={ENV_LABEL[env]}>
                     {rows.length ? rows.map((w) => (
                       <ListRow icon={<Clock />} key={w.model} label={w.model} onClick={() => setEditing({ env, model: w.model })} value={w.window ? tokens(w.window) : "預設"} />
                     )) : <ListRow icon={<Clock />} label="還沒有設定過的模型" />}

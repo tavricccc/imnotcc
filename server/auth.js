@@ -18,7 +18,7 @@ export function ensureAuth() {
   if (!password) {
     password = crypto.randomBytes(9).toString('base64url');
     fs.writeFileSync(path.join(DATA_DIR, 'password.txt'), `${password}\n`, { mode: 0o600 });
-    console.log(`[cc-remote] new password written to ${path.join(DATA_DIR, 'password.txt')}`);
+    console.log(`[imnotcc] new password written to ${path.join(DATA_DIR, 'password.txt')}`);
   }
   setPassword(password);
 }

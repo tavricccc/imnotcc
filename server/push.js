@@ -29,7 +29,7 @@ async function notify(payload) {
     TTL: 3600, urgency: payload.urgency ?? 'normal', topic: payload.tag?.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32) || undefined,
   }).catch((e) => {
     if (e.statusCode === 404 || e.statusCode === 410) gone.add(sub.endpoint);
-    else console.error('[cc-remote] push:', e.statusCode ?? '', e.body || e.message);
+    else console.error('[imnotcc] push:', e.statusCode ?? '', e.body || e.message);
   })));
   if (gone.size) { push.subs = push.subs.filter((s) => !gone.has(s.endpoint)); store.save(); }
 }

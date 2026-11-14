@@ -1,4 +1,4 @@
-// cc-remote desktop: a window onto a cc-remote server (remote or on this PC), plus a tray that
+// imnotcc desktop: a window onto a imnotcc server (remote or on this PC), plus a tray that
 // keeps the local server running. Remote server pages load as their own origin, so the server's
 // cookie and Origin checks work unchanged; only the bundled setup page may call these commands.
 mod local;
@@ -82,7 +82,7 @@ pub fn needs_update(app: &AppHandle, c: &Config) -> bool {
 enum Caller {
     /// The bundled setup page: app code, trusted with everything.
     Setup,
-    /// The configured cc-remote server's own page. It renders Claude's output and files, so a flaw
+    /// The configured imnotcc server's own page. It renders Claude's output and files, so a flaw
     /// there could run script; commands that change the app or reveal secrets ask the user first
     /// through a native dialog, which page script cannot click.
     Web,
@@ -128,7 +128,7 @@ async fn confirm(app: &AppHandle, who: Caller, message: String) -> Result<(), St
     let ok = tauri::async_runtime::spawn_blocking(move || {
         app.dialog()
             .message(message)
-            .title("cc-remote")
+            .title("imnotcc")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom("允許".into(), "取消".into()))
             .blocking_show()
@@ -145,7 +145,7 @@ const TITLEBAR_SCRIPT: &str = r#"
 (() => {
   if (window.__ccrTitlebarInit) return;
   window.__ccrTitlebarInit = true;
-  // The cc-remote web app draws its own titlebar and opts out with this meta tag; other pages
+  // The imnotcc web app draws its own titlebar and opts out with this meta tag; other pages
   // (setup page, a Cloudflare Access login) get this one.
   const mount = () => {
     if (document.querySelector('meta[name="ccr-titlebar"]')) return;
@@ -192,7 +192,7 @@ const TITLEBAR_SCRIPT: &str = r#"
     const drag = document.createElement("div");
     drag.id = "ccr-drag";
     drag.setAttribute("data-tauri-drag-region", "");
-    drag.textContent = "cc-remote";
+    drag.textContent = "imnotcc";
     drag.addEventListener("mousedown", (e) => {
       if (e.button === 0 && win) win.startDragging();
     });
@@ -249,7 +249,7 @@ pub fn open_window(app: &AppHandle, url: Option<String>, show: bool) -> Result<(
         None => WebviewUrl::App("index.html".into()),
     };
     let w = WebviewWindowBuilder::new(app, "main", target)
-        .title("cc-remote")
+        .title("imnotcc")
         .inner_size(1100.0, 820.0)
         .min_inner_size(360.0, 480.0)
         .decorations(false)
@@ -316,7 +316,7 @@ fn get_state(app: AppHandle, window: WebviewWindow) -> Result<StateView, String>
     })
 }
 
-/// Ask `url` whether it is a cc-remote server. A Cloudflare Access login page counts: the real
+/// Ask `url` whether it is a imnotcc server. A Cloudflare Access login page counts: the real
 /// check happens after the user signs in inside the window.
 fn probe(url: &str) -> Result<(), String> {
     let agent = ureq::AgentBuilder::new().timeout(Duration::from_secs(8)).build();
@@ -325,8 +325,8 @@ fn probe(url: &str) -> Result<(), String> {
         return Ok(());
     }
     let body = resp.into_string().map_err(|e| e.to_string())?;
-    let v: serde_json::Value = serde_json::from_str(&body).map_err(|_| format!("{url} 不像是 cc-remote server（/api/me 不是 JSON）"))?;
-    if v.get("authed").is_some() { Ok(()) } else { Err(format!("{url} 不像是 cc-remote server")) }
+    let v: serde_json::Value = serde_json::from_str(&body).map_err(|_| format!("{url} 不像是 imnotcc server（/api/me 不是 JSON）"))?;
+    if v.get("authed").is_some() { Ok(()) } else { Err(format!("{url} 不像是 imnotcc server")) }
 }
 
 #[tauri::command]
@@ -336,7 +336,7 @@ async fn use_remote(app: AppHandle, window: WebviewWindow, url: String) -> Resul
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("網址要以 http:// 或 https:// 開頭".into());
     }
-    confirm(&app, who, format!("要把 cc-remote 改連到這個 server 嗎？\n\n{url}\n\n本機 server 會停止。不是你自己按的話請按「取消」。")).await?;
+    confirm(&app, who, format!("要把 imnotcc 改連到這個 server 嗎？\n\n{url}\n\n本機 server 會停止。不是你自己按的話請按「取消」。")).await?;
     let u = url.clone();
     tauri::async_runtime::spawn_blocking(move || probe(&u)).await.map_err(|e| e.to_string())??;
     let state = app.state::<AppState>();
@@ -378,7 +378,7 @@ fn show_password(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
         Some(p) => format!("本機 server 的初始密碼：\n\n{p}\n\n（在網頁設定裡改過密碼的話，這裡仍是最初的密碼）"),
         None => "這台電腦沒有設成 server，或 server 還沒啟動過。".into(),
     };
-    app.dialog().message(msg).title("cc-remote").show(|_| {});
+    app.dialog().message(msg).title("imnotcc").show(|_| {});
     Ok(())
 }
 
@@ -522,7 +522,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
 
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("cc-remote")
+        .tooltip("imnotcc")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_tray_icon_event(|tray, e| {
@@ -539,7 +539,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     // Stopping waits on the old process; the tray handler runs on the main thread.
                     std::thread::spawn(move || app.state::<AppState>().server.restart(&app));
                 } else {
-                    app.dialog().message("這台電腦沒有設成 server。").title("cc-remote").show(|_| {});
+                    app.dialog().message("這台電腦沒有設成 server。").title("imnotcc").show(|_| {});
                 }
             }
             "quit" => {
@@ -591,7 +591,7 @@ pub fn run() {
             Ok(())
         })
         .build(tauri::generate_context!())
-        .expect("error while building cc-remote")
+        .expect("error while building imnotcc")
         .run(|app, e| match e {
             // No windows left (open_window swaps the window) is not a reason to quit: the app
             // lives in the tray. Only an explicit exit (the tray's 結束) carries a code.

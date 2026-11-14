@@ -1,6 +1,6 @@
-# cc-remote Desktop
+# imnotcc
 
-Windows app: a window onto a cc-remote server, a tray icon, and an optional server on this PC.
+Windows app: the imnotcc window onto your server, a tray icon, and an optional server on this PC.
 
 - First run asks for a server address, or sets this PC up as the server. Setting up needs
   Node.js 20+ on PATH and a signed-in Claude Code; it copies the bundled server files and runs

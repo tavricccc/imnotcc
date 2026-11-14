@@ -121,8 +121,8 @@ export function NewSessionPage({ cwd, environment, onStarted }: {
       compact ? "fixed inset-x-0 top-[var(--visual-top,0px)] h-[var(--visual-height,100dvh)]" : "relative h-dvh")} ref={page}>
       {compact ? (
         <header className="flex shrink-0 items-center gap-2 pt-2">
-          <Button aria-label="返回 Session 清單" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
-          <span className="text-base font-semibold">新增 Session</span>
+          <Button aria-label="返回對話清單" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
+          <span className="text-base font-semibold">新增對話</span>
         </header>
       ) : null}
       <div className="grid min-h-0 flex-1 content-center justify-items-center gap-3 overflow-hidden text-center">

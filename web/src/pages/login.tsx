@@ -29,7 +29,7 @@ export function LoginPage() {
       <form className="content-in grid w-full max-w-sm justify-items-center gap-6" onSubmit={submit}>
         <img alt="" className="size-20 rounded-[22.37%] shadow-float" src="/icon.svg" />
         <div className="grid gap-1 text-center">
-          <h1 className="text-2xl font-bold tracking-tight">cc-remote</h1>
+          <h1 className="text-2xl font-bold tracking-tight">imnotcc</h1>
           <p className="text-[0.9375rem] text-ink-muted">用手機操作這台電腦上的 Claude Code</p>
         </div>
         <Panel className="grid w-full gap-4">

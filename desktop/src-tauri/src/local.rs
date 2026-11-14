@@ -1,4 +1,4 @@
-// Running cc-remote's server on this PC: install it from the bundled files with the system's
+// Running imnotcc's server on this PC: install it from the bundled files with the system's
 // Node.js, keep it running (restart when it dies), and stop exactly the process tree we started.
 use crate::{base_dir, local_url, needs_update, open_window, save_config, local_port, AppState};
 use serde::Serialize;
@@ -128,8 +128,8 @@ impl Supervisor {
             if port_in_use(port) {
                 drop(s);
                 app.dialog()
-                    .message(format!("連接埠 {port} 已經被別的程式占用（可能是另一個 cc-remote），本機 server 沒有啟動。\n可以在 {} 的 config.json 改 port。", base_dir(app).display()))
-                    .title("cc-remote")
+                    .message(format!("連接埠 {port} 已經被別的程式占用（可能是另一個 imnotcc），本機 server 沒有啟動。\n可以在 {} 的 config.json 改 port。", base_dir(app).display()))
+                    .title("imnotcc")
                     .kind(MessageDialogKind::Error)
                     .show(|_| {});
                 return;
@@ -173,14 +173,14 @@ impl Supervisor {
             match child {
                 Ok(mut c) => {
                     if !join_job(&c) {
-                        note(&log_path, "[cc-remote desktop] could not tie the server to the app; it may outlive a crash");
+                        note(&log_path, "[imnotcc desktop] could not tie the server to the app; it may outlive a crash");
                     }
                     self.0.lock().unwrap().pid = Some(c.id());
                     let status = c.wait();
                     self.0.lock().unwrap().pid = None;
-                    note(&log_path, &format!("[cc-remote desktop] server exited: {status:?}"));
+                    note(&log_path, &format!("[imnotcc desktop] server exited: {status:?}"));
                 }
-                Err(e) => note(&log_path, &format!("[cc-remote desktop] could not start node: {e}")),
+                Err(e) => note(&log_path, &format!("[imnotcc desktop] could not start node: {e}")),
             }
             if !self.current(gen) {
                 break;

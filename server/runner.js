@@ -198,7 +198,7 @@ class Runner {
     }
     if (m.type === 'system' && m.subtype === 'init') {
       this.controls().then((c) => { if (c) { cachedControls = c; emit(null, { kind: 'controls', controls: c }); } })
-        .catch((e) => console.error('[cc-remote] controls:', e.message));
+        .catch((e) => console.error('[imnotcc] controls:', e.message));
     }
     if (m.type === 'assistant' && m.parent_tool_use_id === null) this.draft = '';
     emit(this.id, { kind: 'sdk', msg: m });
@@ -232,7 +232,7 @@ class Runner {
       if (files.length && after) meta.trees = keep(meta.trees, { top: before.top, before: before.tree, after: after.tree });
       store.save();
       emit(this.id, { kind: 'changes', uuid: turn.uuid, files });
-    })().catch((e) => console.error('[cc-remote] changes:', e.message));
+    })().catch((e) => console.error('[imnotcc] changes:', e.message));
   }
 
   setStatus(status) {
@@ -354,13 +354,13 @@ class Runner {
         categories: u.categories.filter((c) => c.kind === 'used' && c.tokens > 0).map((c) => ({ name: c.name, tokens: c.tokens })),
       };
       emit(this.id, { kind: 'context', context: this.context });
-    } catch (e) { console.error('[cc-remote] context usage:', e.message); }
+    } catch (e) { console.error('[imnotcc] context usage:', e.message); }
     try {
       const u = await readUsage(q);
       const s = u?.session;
       this.cost = s ? { usd: s.total_cost_usd, added: s.total_lines_added, removed: s.total_lines_removed } : null;
       emit(this.id, { kind: 'cost', cost: this.cost });
-    } catch (e) { console.error('[cc-remote] plan usage:', e.message); }
+    } catch (e) { console.error('[imnotcc] plan usage:', e.message); }
   }
 
   armIdle() {

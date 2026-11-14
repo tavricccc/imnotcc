@@ -27,7 +27,7 @@
   --shadow-float: var(--elevation-float);
 }
 
-/* cc-remote keeps its own palette (Strata's 朱 theme) on Novae's token names.
+/* imnotcc keeps its own palette (Strata's 朱 theme) on Novae's token names.
    The emphatic pill is the accent: orange with white type. Light or dark follows the system
    (data-theme is set before paint in index.html). */
 :root {

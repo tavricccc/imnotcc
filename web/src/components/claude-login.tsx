@@ -105,7 +105,7 @@ export function ClaudeLoginWatcher() {
     const where = out.length > 1 ? out.map((t) => TARGET_LABEL[t]).join("、") : TARGET_LABEL[first];
     toast.warning(expired ? `Claude 的登入已失效（${where}）` : `Claude 還沒登入（${where}）`, {
       action: { label: "登入", onClick: () => setTarget(first) },
-      description: "登入之前，session 沒辦法回覆。",
+      description: "登入之前，對話沒辦法回覆。",
       duration: Infinity,
       id: TOAST_ID,
       onDismiss: () => claudeAuth.set({ dismissed: true }),

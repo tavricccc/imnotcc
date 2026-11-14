@@ -84,12 +84,12 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
   const actions = (
     <>
       <UsageRing label={five == null && seven == null ? "方案用量" : `方案用量：5 小時 ${five ?? "–"}%，每週 ${seven ?? "–"}%`} onClick={() => void openUsage()} pct={five == null && seven == null ? null : Math.max(five ?? 0, seven ?? 0)} />
-      {sidebar ? null : <Button aria-label="新增 Session" onClick={() => openDraft()} size="icon" variant="primary"><Plus weight="bold" /></Button>}
+      {sidebar ? null : <Button aria-label="新增對話" onClick={() => openDraft()} size="icon" variant="primary"><Plus weight="bold" /></Button>}
     </>
   );
 
   function sessionRow(s: SessionRow) {
-    const title = s.title || (s.temporary ? "Temp Chat" : "新的 session");
+    const title = s.title || (s.temporary ? "Temp Chat" : "新的對話");
     const isRunning = s.running || running[s.id];
     const href = `/s/${s.id}`;
     if (sidebar) {
@@ -118,9 +118,9 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
             <h2 className="text-base font-semibold">Session</h2>
             <div className="flex items-center gap-1">{actions}</div>
           </header>
-        ) : <PageHeader actions={actions} title="Session" />}
+        ) : <PageHeader actions={actions} title="對話" />}
 
-        {sidebar ? <Button className="justify-start px-2" onClick={() => openDraft()} size="sm" variant="ghost"><Plus weight="bold" />新增 Session</Button> : null}
+        {sidebar ? <Button className="justify-start px-2" onClick={() => openDraft()} size="sm" variant="ghost"><Plus weight="bold" />新增對話</Button> : null}
 
         {canSwitch ? (
           <Segmented className={sidebar ? "[&_[role=tablist]]:overflow-x-hidden [&_[role=tab]]:px-3" : undefined} label="執行環境" onChange={(value) => prefs.set({ sessionEnvironment: value })} options={environments} value={env} />
@@ -128,11 +128,11 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
       </div>
 
       <div className={sidebar ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 pb-4" : "contents"}>
-      {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到 session" />
+      {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到對話" />
         : !visibleGroups ? <LoadingList label="載入中" rows={3} />
         : !visibleGroups.length && !visibleRecent.length ? (
-          sidebar ? <p className="px-2 py-4 text-sm text-ink-muted">還沒有 session</p>
-            : <EmptyState action={<Button onClick={() => openDraft()} variant="primary"><Plus weight="bold" />開一個新的</Button>} description="開啟 Temp Chat 或選擇資料夾，就能跟 Claude Code 對話。" title="還沒有 session" />
+          sidebar ? <p className="px-2 py-4 text-sm text-ink-muted">還沒有對話</p>
+            : <EmptyState action={<Button onClick={() => openDraft()} variant="primary"><Plus weight="bold" />開一個新的</Button>} description="開啟 Temp Chat 或選擇資料夾，就能跟 Claude Code 對話。" title="還沒有對話" />
         ) : sidebar ? (
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
             {visibleGroups.map((g) => (

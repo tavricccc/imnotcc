@@ -8,9 +8,9 @@ import { EdgeBlur } from "@/ui/edge-blur";
 import { PrimaryNav, type NavItem } from "@/ui/nav";
 
 const RAIL_ITEMS: NavItem[] = [
-  { href: "/", icon: ChatsCircle, label: "Session" },
-  { href: "/plugins", icon: PuzzlePiece, label: "Plugin" },
-  { href: "/settings", icon: SlidersHorizontal, label: "Agent 設定" },
+  { href: "/", icon: ChatsCircle, label: "對話" },
+  { href: "/plugins", icon: PuzzlePiece, label: "擴充元件" },
+  { href: "/settings", icon: SlidersHorizontal, label: "Claude 設定" },
 ];
 const DOCK_ITEMS: NavItem[] = [
   ...RAIL_ITEMS,
@@ -31,7 +31,7 @@ export function AppShell({ active, bare, children, dock, sessions }: {
   sessions?: { content: React.ReactNode; collapsed: boolean; toggle: () => void };
 }) {
   const showSessions = !!sessions && !sessions.collapsed;
-  const toggleLabel = showSessions ? "收起 session 清單" : "展開 session 清單";
+  const toggleLabel = showSessions ? "收起對話清單" : "展開對話清單";
   const { sessionSidebarWidth } = useStore(prefs);
   const [maxWidth, setMaxWidth] = React.useState(sidebarLimit);
   const [dragWidth, setDragWidth] = React.useState<number | null>(null);
@@ -76,7 +76,7 @@ export function AppShell({ active, bare, children, dock, sessions }: {
             </span>
           </button>
         ) : (
-          <img alt="cc-remote" className="size-8 rounded-icon" src="/icon.svg" />
+          <img alt="imnotcc" className="size-8 rounded-icon" src="/icon.svg" />
         )}
         <PrimaryNav activeHref={active} items={RAIL_ITEMS} label="主選單" variant="rail" />
         <button
@@ -94,7 +94,7 @@ export function AppShell({ active, bare, children, dock, sessions }: {
         </button>
       </aside>
       {sessions ? (
-        <aside aria-label="Session 清單" className={cn(
+        <aside aria-label="對話清單" className={cn(
           "fixed inset-y-0 left-[var(--rail-width)] z-30 hidden overflow-clip bg-surface/60 md:block",
           "motion-safe:transition-[width] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)]",
           showSessions ? "w-[var(--session-sidebar-width)]" : "w-0",
@@ -105,7 +105,7 @@ export function AppShell({ active, bare, children, dock, sessions }: {
             !showSessions && "-translate-x-4",
           )}>{sessions.content}</div>
           {showSessions ? (
-            <div aria-controls="session-sidebar" aria-label="調整 session 清單寬度" aria-orientation="vertical"
+            <div aria-controls="session-sidebar" aria-label="調整對話清單寬度" aria-orientation="vertical"
               aria-valuemax={maxWidth} aria-valuemin={MIN_SIDEBAR_WIDTH} aria-valuenow={width}
               className="absolute inset-y-0 right-0 z-10 w-2 touch-none cursor-col-resize outline-none hover:bg-accent-soft focus-visible:bg-accent-soft active:bg-accent-soft"
               role="separator" tabIndex={0}

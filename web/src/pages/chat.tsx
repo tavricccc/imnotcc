@@ -399,7 +399,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const dockSwapped = React.useRef(false);
   if (question) dockSwapped.current = true;
   const contextPct = s.context?.threshold ? (s.context.used / s.context.threshold) * 100 : null;
-  const title = meta?.title || (meta?.temporary ? "Temp Chat" : "新的 session");
+  const title = meta?.title || (meta?.temporary ? "Temp Chat" : "新的對話");
 
   // ---- Composer and slash commands ----
   const slash = React.useMemo(() => {
@@ -500,13 +500,13 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
             </p>
           </button>
           <UsageRing className="size-10 border-0 bg-transparent" label={`Context ${contextPct == null ? "尚無資料" : `${Math.round(contextPct)}%`}`} onClick={() => { send(id, { t: "usage" }); setSheet("usage"); }} pct={contextPct} />
-          <Button aria-label="Session 選項" onClick={() => setSheet("options")} size="icon" variant="ghost"><DotsThree weight="bold" /></Button>
+          <Button aria-label="對話選項" onClick={() => setSheet("options")} size="icon" variant="ghost"><DotsThree weight="bold" /></Button>
         </div>
       </header>
       <EdgeBlur className="chat-edge-blur absolute h-[calc(var(--chat-header-height,0px)+1.25rem)]" side="top" />
       <div className="absolute inset-0 overflow-y-auto overscroll-contain" ref={scrollArea}>
           <main className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-3.5 px-[var(--gutter)] pb-[calc(var(--chat-composer-height,0px)+1rem)] pt-[calc(var(--chat-header-height,0px)+1rem)] md:px-8">
-            {loadError ? <ErrorState message={loadError} retryLabel="重試" title="打不開這個 session" /> : null}
+            {loadError ? <ErrorState message={loadError} retryLabel="重試" title="打不開這個對話" /> : null}
             {page.start > 0 ? (
               <Button className="justify-self-center" onClick={() => void loadEarlier()} size="sm" status={page.loadingEarlier ? "loading" : "idle"} variant="ghost">載入更早的訊息</Button>
             ) : null}
@@ -580,7 +580,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
           </ListGroup>
           <ListGroup title="動作">
             <ListRow icon={<Sparkle />} label="壓縮對話" onClick={() => command("/compact")} />
-            <ListRow icon={<GitBranch />} label="分支成新的 session" onClick={() => void fork()} />
+            <ListRow icon={<GitBranch />} label="分支成新的對話" onClick={() => void fork()} />
             <ListRow icon={<PencilSimple />} label="改名" onClick={() => setSheet("rename")} />
             <ListRow disabled={!s.open} icon={<ArrowClockwise />} label="重新啟動 Claude Code" onClick={restart} value={s.open ? undefined : "未啟動"} />
             <ListRow icon={<Terminal />} label="複製電腦上的接續指令" onClick={() => void copyResume()} />
@@ -612,7 +612,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
             </ListGroup>
           ) : null}
           {s.cost ? (
-            <ListGroup title="這個 session（本次啟動）">
+            <ListGroup title="這個對話（本次啟動）">
               <ListRow label="費用（等值）" trailing={<span className="text-[0.9375rem] tabular-nums text-ink-muted">${s.cost.usd.toFixed(2)}</span>} />
               <ListRow label="程式碼" trailing={<span className="text-[0.9375rem] tabular-nums text-ink-muted">+{s.cost.added} −{s.cost.removed}</span>} />
             </ListGroup>
@@ -656,11 +656,11 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
 
       <ConfirmDialog
         confirmLabel="移除"
-        description="只是從 cc-remote 的列表拿掉，電腦上的紀錄檔會留著。"
+        description="只是從 imnotcc 的列表拿掉，電腦上的紀錄檔會留著。"
         onConfirm={() => void del(sessionUrl).then(() => { window.clearTimeout(archiveTimer.current); archiveTimer.current = undefined; void removeLocalTranscript(id).catch(() => {}); clearCache(sessionUrl); navigate("/", { replace: true }); })}
         onOpenChange={(o) => setSheet(o ? "remove" : null)}
         open={sheet === "remove"}
-        title="移除這個 session？"
+        title="移除這個對話？"
         tone="danger"
       />
     </div>

@@ -29,7 +29,7 @@ self.addEventListener('push', (e) => {
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
     const watching = data.url && wins.some((w) => w.focused && w.visibilityState === 'visible' && new URL(w.url).pathname === data.url);
     if (watching) return;
-    return self.registration.showNotification(data.title || 'cc-remote', {
+    return self.registration.showNotification(data.title || 'imnotcc', {
       body: data.body || '', tag: data.tag, renotify: !!data.tag, icon: '/icon-192.png', badge: '/icon-192.png', data: { url: data.url || '/' },
     });
   }));

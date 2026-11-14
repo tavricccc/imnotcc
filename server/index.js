@@ -64,7 +64,7 @@ app.post('/api/password', (req, res) => {
 const sessionMeta = (id) => store.get().sessions[id];
 const requireSession = (req, res) => {
   const meta = sessionMeta(req.params.id);
-  if (!meta) res.status(404).json({ error: '找不到這個 session。' });
+  if (!meta) res.status(404).json({ error: '找不到這個對話。' });
   return meta;
 };
 
@@ -302,7 +302,7 @@ claudeSettingsRoutes(app, wrap);
 claudeLoginRoutes(app, wrap);
 
 app.use('/api', (err, _req, res, _next) => {
-  console.error('[cc-remote]', err);
+  console.error('[imnotcc]', err);
   res.status(500).json({ error: String(err?.message ?? err) });
 });
 
@@ -369,7 +369,7 @@ wss.on('connection', (ws) => {
       }
       return;
     }
-    if (!id || !sessionMeta(id)) return send({ session: id ?? null, kind: 'error', message: '找不到這個 session。' });
+    if (!id || !sessionMeta(id)) return send({ session: id ?? null, kind: 'error', message: '找不到這個對話。' });
     const r = runners.runnerFor(id);
     try {
       switch (m.t) {
@@ -405,4 +405,4 @@ process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
 
 // Loopback only: the public address reaches this machine through the Cloudflare tunnel.
-server.listen(PORT, '127.0.0.1', () => console.log(`[cc-remote] listening on http://127.0.0.1:${PORT}${DEV ? ' (dev)' : ''}`));
+server.listen(PORT, '127.0.0.1', () => console.log(`[imnotcc] listening on http://127.0.0.1:${PORT}${DEV ? ' (dev)' : ''}`));

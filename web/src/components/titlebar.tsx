@@ -39,7 +39,7 @@ export function Titlebar() {
         }}
       >
         <img alt="" className="size-4 rounded-[22.37%]" src="/icon.svg" />
-        <span>cc-remote</span>
+        <span>imnotcc</span>
       </div>
       <div className="flex items-stretch">
         <button

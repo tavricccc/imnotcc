@@ -1,6 +1,6 @@
 # Security Policy
 
-`cc-remote` gives a browser client remote access to Claude Code running on your machine. With `bypassPermissions` enabled, that is equivalent to remote shell access as your OS user.
+`imnotcc` gives a browser client remote access to Claude Code running on your machine. With `bypassPermissions` enabled, that is equivalent to remote shell access as your OS user.
 
 ## Threat Model & Protections
 
@@ -13,7 +13,7 @@ The server applies these controls by default:
 
 ## Deployment Recommendations
 
-- **Put an external auth layer in front of any public URL.** Do not expose `cc-remote` directly to the internet with only the app password. Use Cloudflare Tunnel + Cloudflare Access, Tailscale, or an equivalent identity-aware proxy.
+- **Put an external auth layer in front of any public URL.** Do not expose `imnotcc` directly to the internet with only the app password. Use Cloudflare Tunnel + Cloudflare Access, Tailscale, or an equivalent identity-aware proxy.
 - **Set `CC_REMOTE_ORIGINS` explicitly** to your tunnel or proxy origin when serving remotely.
 - **Use a strong password** via `CC_REMOTE_PASSWORD` or change the generated password in **Settings → Account** after your first login. Delete `data/password.txt` once you have logged in.
 

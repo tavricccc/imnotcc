@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cc-remote 快速設定</title>
+<title>imnotcc 快速設定</title>
 <style>
   :root {
     color-scheme: light;
@@ -209,8 +209,8 @@
 <body>
 <div class="shell">
   <div class="hero">
-    <img alt="cc-remote" class="brand-icon" src="icon.svg">
-    <h1 id="hero-title">歡迎使用 cc-remote</h1>
+    <img alt="imnotcc" class="brand-icon" src="icon.svg">
+    <h1 id="hero-title">歡迎使用 imnotcc</h1>
     <p class="sub" id="hero-sub">選擇這台電腦的角色，完成快速設定</p>
   </div>
 
@@ -221,7 +221,7 @@
         <span class="choice-title">把這台電腦設為 Server</span>
         <span class="pill" id="node-badge">檢查 Node.js…</span>
       </div>
-      <p class="choice-desc">在這台電腦本機執行 cc-remote 與 Claude Code，關掉視窗後會留在系統匣繼續運作，讓手機或其他裝置連線。</p>
+      <p class="choice-desc">在這台電腦本機執行 imnotcc 與 Claude Code，關掉視窗後會留在系統匣繼續運作，讓手機或其他裝置連線。</p>
     </button>
 
     <button class="choice-card" id="pick-remote" type="button">
@@ -229,7 +229,7 @@
         <span class="choice-title">連到現有的 Server</span>
         <span class="pill accent">Client</span>
       </div>
-      <p class="choice-desc">這台電腦只作為桌面端視窗，連線到另一台已經架設好的 cc-remote 伺服器。</p>
+      <p class="choice-desc">這台電腦只作為桌面端視窗，連線到另一台已經架設好的 imnotcc 伺服器。</p>
     </button>
   </div>
 
@@ -317,7 +317,7 @@
     </div>
     <p class="hint" style="margin-top:14px;">本機位址：<strong id="local-url"></strong>。若要從手機遠端連線，請將通道指到這個位址。</p>
     <div class="actions">
-      <button class="btn btn-primary" id="open-local" type="button">開始使用 cc-remote</button>
+      <button class="btn btn-primary" id="open-local" type="button">開始使用 imnotcc</button>
     </div>
   </div>
 </div>
@@ -372,7 +372,7 @@
   });
 
   async function startInstall(update) {
-    $("inst-title").textContent = update ? "cc-remote 已更新，正在更新本機 Server…" : "正在安裝本機 Server…";
+    $("inst-title").textContent = update ? "imnotcc 已更新，正在更新本機 Server…" : "正在安裝本機 Server…";
     $("inst-spinner").hidden = false;
     $("log").textContent = "";
     $("inst-err").textContent = "";

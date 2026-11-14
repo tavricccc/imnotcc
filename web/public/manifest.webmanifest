@@ -1,6 +1,6 @@
 {
-  "name": "cc-remote",
-  "short_name": "cc-remote",
+  "name": "imnotcc",
+  "short_name": "imnotcc",
   "description": "Claude Code，從手機。",
   "start_url": "/",
   "scope": "/",

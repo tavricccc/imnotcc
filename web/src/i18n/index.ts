@@ -1,4 +1,4 @@
-// The few strings the Novae primitives ask for. cc-remote is Traditional Chinese only.
+// The few strings the Novae primitives ask for. imnotcc is Traditional Chinese only.
 const STRINGS: Record<string, string> = {
   "common.close": "關閉",
   "ui.common.cancel": "取消",

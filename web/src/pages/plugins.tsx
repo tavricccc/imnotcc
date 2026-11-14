@@ -57,13 +57,13 @@ export function PluginsPage() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader actions={<Button aria-label="重新整理" onClick={() => void load()} size="icon"><ArrowClockwise weight="bold" /></Button>} title="Plugin" />
-      {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到 plugin" />
+      <PageHeader actions={<Button aria-label="重新整理" onClick={() => void load()} size="icon"><ArrowClockwise weight="bold" /></Button>} title="擴充元件" />
+      {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到擴充元件" />
         : !data ? <LoadingList label="載入中" rows={3} />
         : (
           <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
             {data.installed.length ? (
-              <ListGroup footer="改完之後，開著的 session 要重新啟動才會載入。" title="已安裝">
+              <ListGroup footer="改完之後，開著的對話要重新啟動才會載入。" title="已安裝">
                 {data.installed.map((p) => (
                   <li className={cn(rowClass, "py-0 pr-4")} key={p.id}>
                     <button
@@ -87,7 +87,7 @@ export function PluginsPage() {
                 ))}
               </ListGroup>
             ) : (
-              <EmptyState description="從 marketplace 找一個來裝。" title="還沒有 plugin" />
+              <EmptyState description="從 marketplace 找一個來裝。" title="還沒有擴充元件" />
             )}
             <ListGroup title="取得更多">
               <ListRow href="/plugins/browse" icon={<MagnifyingGlass />} label="瀏覽並安裝" />
@@ -120,7 +120,7 @@ export function PluginsPage() {
 
       <ConfirmDialog
         confirmLabel="解除安裝"
-        description="開著的 session 重新啟動後就不會再載入它。"
+        description="開著的對話重新啟動後就不會再載入它。"
         onConfirm={() => {
           const p = selected;
           setConfirmRemove(false);
@@ -156,10 +156,10 @@ export function PluginBrowsePage() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader back={{ href: "/plugins", label: "Plugin" }} title="瀏覽並安裝" />
+      <PageHeader back={{ href: "/plugins", label: "擴充元件" }} title="瀏覽並安裝" />
       <label className="glass-control flex h-12 items-center gap-3 rounded-full border px-4 focus-within:border-[var(--focus-ring)]">
         <MagnifyingGlass aria-hidden className="size-5 shrink-0 text-ink-muted" />
-        <input aria-label="搜尋 plugin" autoFocus className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-faint" onChange={(e) => setQ(e.target.value)} placeholder="搜尋 marketplace 裡的 plugin" type="search" value={q} />
+        <input aria-label="搜尋擴充元件" autoFocus className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-faint" onChange={(e) => setQ(e.target.value)} placeholder="搜尋 marketplace 裡的擴充元件" type="search" value={q} />
       </label>
 
       {error ? <ErrorState message={error} onRetry={search} retryLabel="重試" title="搜尋失敗" />
@@ -182,7 +182,7 @@ export function PluginBrowsePage() {
               </li>
             ))}
           </ListGroup>
-        ) : <EmptyState description="換個關鍵字試試。" title="沒有符合的 plugin" />}
+        ) : <EmptyState description="換個關鍵字試試。" title="沒有符合的擴充元件" />}
     </div>
   );
 }
@@ -208,7 +208,7 @@ export function PluginSourcesPage() {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         actions={<Button aria-label="加入 marketplace" onClick={() => setAddOpen(true)} size="icon" variant="primary"><Plus weight="bold" /></Button>}
-        back={{ href: "/plugins", label: "Plugin" }}
+        back={{ href: "/plugins", label: "擴充元件" }}
         title="Marketplace 來源"
       />
       {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到 marketplace" />
@@ -232,12 +232,12 @@ export function PluginSourcesPage() {
         open={selected !== null}
         title={selected?.name ?? ""}
       >
-        <p className="pb-2 text-[0.9375rem] text-ink-muted">更新會重新抓這個來源的 plugin 清單。</p>
+        <p className="pb-2 text-[0.9375rem] text-ink-muted">更新會重新抓這個來源的擴充元件清單。</p>
       </Sheet>
 
       <ConfirmDialog
         confirmLabel="移除"
-        description="從這個來源裝的 plugin 也可能一起被移除。"
+        description="從這個來源裝的擴充元件也可能一起被移除。"
         onConfirm={() => {
           const m = selected;
           setConfirmRemove(false);

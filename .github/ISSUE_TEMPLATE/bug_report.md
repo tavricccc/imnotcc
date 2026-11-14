@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a problem or unexpected behavior in cc-remote
+about: Report a problem or unexpected behavior in imnotcc
 title: "[Bug]: "
 labels: bug
 ---

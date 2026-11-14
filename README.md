@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="web/public/icon.svg" width="80" height="80" alt="cc-remote" />
-  <h1>cc-remote</h1>
-  <p>Operate your local Claude Code CLI from your phone or browser.</p>
+  <img src="web/public/icon.svg" width="80" height="80" alt="imnotcc" />
+  <h1>imnotcc</h1>
+  <p>A graphical home for Claude Code: a Windows app, a PWA on your phone, the same sessions everywhere.</p>
 
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0" /></a>
@@ -17,7 +17,7 @@
 
 ---
 
-`cc-remote` wraps the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) in a mobile-first PWA. Sessions are grouped by project folder and stored in Claude Code's own `~/.claude/projects/` directory, so you keep your existing `CLAUDE.md`, MCP servers, plugins, and subscription—and can switch back to `claude --resume <id>` on your desktop anytime.
+`imnotcc` is not Claude Code; it is a front end for it. It wraps the [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) in an app you use at your desk (the Windows app, which can also host the server) and, when you want, from your phone or any browser. Sessions are grouped by project folder and stored in Claude Code's own `~/.claude/projects/` directory, so you keep your existing `CLAUDE.md`, MCP servers, plugins, and subscription—and can switch back to `claude --resume <id>` on your desktop anytime.
 
 ## Features
 
@@ -27,7 +27,9 @@
 - **Interactive permission control**: Switch permission modes (`default`, `acceptEdits`, `plan`, `auto`, `bypassPermissions`, `dontAsk`) per session, and approve or deny individual tool requests from your phone.
 - **Slash commands & session controls**: Trigger SDK-reported `/` commands, switch models and effort levels, adjust `/autocompact` thresholds, interrupt active turns, or copy `cd <cwd> && claude --resume <id>`.
 - **Context & plan usage**: Inspect token breakdown, autocompact threshold, and 5-hour / 7-day plan rate limits.
-- **Plugin management**: List, install, uninstall, enable, disable, and add marketplaces via `claude plugin`.
+- **Sending while Claude works**: queue a message for the next turn or steer the running one; pick the default in settings, long-press send (or Ctrl+Enter) for the other.
+- **Claude sign-in in the app**: when Claude Code is signed out or its login expires, the app walks you through signing in again; no terminal needed.
+- **Plugin management: List, install, uninstall, enable, disable, and add marketplaces via `claude plugin`.
 - **WSL support (Windows)**: Folders starting with `/` run inside WSL (`CC_REMOTE_WSL_DISTRO`, default `Ubuntu`).
 - **PWA**: Installable on iOS and Android with offline shell caching.
 
@@ -70,21 +72,21 @@ Point your tunnel or reverse proxy to `http://127.0.0.1:4280` and set `CC_REMOTE
 CC_REMOTE_ORIGINS=https://cc.example.com npm start
 ```
 
-Because `cc-remote` can execute commands on your machine, put an identity layer (such as **Cloudflare Access** or **Tailscale**) in front of the tunnel in addition to the built-in app password. See [SECURITY.md](SECURITY.md) for details.
+Because `imnotcc` can execute commands on your machine, put an identity layer (such as **Cloudflare Access** or **Tailscale**) in front of the tunnel in addition to the built-in app password. See [SECURITY.md](SECURITY.md) for details.
 
 ## Running in the Background (Windows Task Scheduler)
 
-On Windows, you can run `cc-remote` automatically at sign-in without a visible console window:
+On Windows, you can run `imnotcc` automatically at sign-in without a visible console window:
 
-1. Copy [scripts/run.example.cmd](scripts/run.example.cmd) to `%LOCALAPPDATA%\cc-remote\run.cmd` then edit it:
-   - **Required:** change the `cd /d "C:\path\to\cc-remote"` line to the folder where you cloned `cc-remote`. Once copied, the script no longer sits inside the project, so a relative path such as `%~dp0..` would point at `%LOCALAPPDATA%` and `node server\index.js` would fail to start.
+1. Copy [scripts/run.example.cmd](scripts/run.example.cmd) to `%LOCALAPPDATA%\imnotcc\run.cmd` then edit it:
+   - **Required:** change the `cd /d "C:\path\to\cc-remote"` line to the folder where you cloned `imnotcc`. Once copied, the script no longer sits inside the project, so a relative path such as `%~dp0..` would point at `%LOCALAPPDATA%` and `node server\index.js` would fail to start.
    - Update `CC_REMOTE_ORIGINS`.
 2. Register the scheduled task in PowerShell:
 
 ```powershell
 $action = New-ScheduledTaskAction `
   -Execute 'C:\Windows\System32\conhost.exe' `
-  -Argument "--headless C:\Windows\System32\cmd.exe /c `"$env:LOCALAPPDATA\cc-remote\run.cmd`""
+  -Argument "--headless C:\Windows\System32\cmd.exe /c `"$env:LOCALAPPDATA\imnotcc\run.cmd`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $trigger.Delay = 'PT20S'
 $settings = New-ScheduledTaskSettingsSet `
@@ -93,7 +95,7 @@ $settings = New-ScheduledTaskSettingsSet `
   -RestartInterval (New-TimeSpan -Minutes 1) `
   -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-Register-ScheduledTask -TaskName 'cc-remote' -Action $action -Trigger $trigger -Settings $settings
+Register-ScheduledTask -TaskName 'imnotcc' -Action $action -Trigger $trigger -Settings $settings
 ```
 
 - `conhost.exe --headless` prevents a console window from flashing.
@@ -103,9 +105,9 @@ To apply updates after pulling new code:
 
 ```powershell
 npm run build
-Stop-ScheduledTask -TaskName 'cc-remote'
+Stop-ScheduledTask -TaskName 'imnotcc'
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object CommandLine -match 'server\\index\.js' | ForEach-Object { Stop-Process -Id $_.ProcessId }
-Start-ScheduledTask -TaskName 'cc-remote'
+Start-ScheduledTask -TaskName 'imnotcc'
 ```
 
 ## Environment Variables

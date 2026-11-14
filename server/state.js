@@ -1,4 +1,4 @@
-// The only data this server keeps: which sessions cc-remote made, the folder list, app settings
+// The only data this server keeps: which sessions imnotcc made, the folder list, app settings
 // and the login secret. Everything else (history, titles) is read from Claude Code's own files.
 import fs from 'node:fs';
 import path from 'node:path';

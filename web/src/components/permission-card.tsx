@@ -31,7 +31,7 @@ function Tool({ onAnswer, req }: { onAnswer: (a: Answer) => void; req: Permissio
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={() => onAnswer({ decision: "deny" })}>拒絕</Button>
         <Button onClick={() => onAnswer({ decision: "allow" })} variant="primary">允許</Button>
-        <Button className="col-span-2" onClick={() => onAnswer({ decision: "always" })} size="sm" variant="ghost">這個 session 都允許</Button>
+        <Button className="col-span-2" onClick={() => onAnswer({ decision: "always" })} size="sm" variant="ghost">這個對話都允許</Button>
       </div>
     </>
   );

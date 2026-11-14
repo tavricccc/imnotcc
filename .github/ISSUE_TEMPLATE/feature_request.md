@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an improvement or new capability for cc-remote
+about: Suggest an improvement or new capability for imnotcc
 title: "[Feature]: "
 labels: enhancement
 ---

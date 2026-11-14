@@ -1,7 +1,7 @@
 <div align="center">
-  <img src="web/public/icon.svg" width="80" height="80" alt="cc-remote" />
-  <h1>cc-remote</h1>
-  <p>用手機或瀏覽器遠端操作本機的 Claude Code CLI。</p>
+  <img src="web/public/icon.svg" width="80" height="80" alt="imnotcc" />
+  <h1>imnotcc</h1>
+  <p>Claude Code 的圖形介面：Windows App、手機 PWA，同一份對話到哪都接得上。</p>
 
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue.svg" alt="License: Apache-2.0" /></a>
@@ -17,17 +17,19 @@
 
 ---
 
-`cc-remote` 以 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 搭配行動端優先的 PWA 介面。Session 依資料夾分組，對話紀錄直接讀寫本機的 `~/.claude/projects/`，因此能沿用電腦上既有的 `CLAUDE.md`、MCP、plugin 與訂閱額度，也能隨時回到電腦執行 `claude --resume <id>` 接續工作。
+`imnotcc` 不是 Claude Code，而是它的前端。在電腦上用 Windows App（也能順便當 server），想離開座位時再用手機或任何瀏覽器接著用。底層以 [Claude Agent SDK](https://www.npmjs.com/package/@anthropic-ai/claude-agent-sdk) 打造。對話依資料夾分組，對話紀錄直接讀寫本機的 `~/.claude/projects/`，因此能沿用電腦上既有的 `CLAUDE.md`、MCP、擴充元件與訂閱額度，也能隨時回到電腦執行 `claude --resume <id>` 接續工作。
 
 ## 功能
 
-- **依資料夾分組與臨時 session**：在已儲存的專案資料夾下建立 session，或開臨時 session；支援分支（`forkSession`）、改名（`renameSession`）與從列表移除（不刪除 CLI 紀錄檔）。
+- **依資料夾分組與臨時對話**：在已儲存的專案資料夾下建立對話，或開臨時對話；支援分支（`forkSession`）、改名（`renameSession`）與從列表移除（不刪除 CLI 紀錄檔）。
 - **串流對話與工具卡片**：透過 WebSocket 即時串流輸出、展開檢視工具呼叫與結果、預覽圖片與上傳圖片提問。關閉網頁後任務仍會在伺服器繼續執行，重新開啟時自動補回錯過的訊息。
 - **檔案預覽與差異**：Claude 提到的檔案會變成可點的標籤，在預覽面板中開啟（寬螢幕在對話右側，手機為 sheet），支援 Markdown 排版、程式碼上色、圖片與 PDF。每回合變更的檔案可逐一開啟左右對照的 diff。本機 HTML 會在新分頁以 sandbox 開啟，與 app 隔離。回合 diff 依賴 git 快照，約兩週後可能被 `git gc` 清除。
-- **權限控制**：每個 session 可切換權限模式（`default`、`acceptEdits`、`plan`、`auto`、`bypassPermissions`、`dontAsk`），非 bypass 模式下可在手機上即時允許或拒絕工具請求。
+- **權限控制**：每個對話可切換權限模式（`default`、`acceptEdits`、`plan`、`auto`、`bypassPermissions`、`dontAsk`），非 bypass 模式下可在手機上即時允許或拒絕工具請求。
 - **斜線指令與快捷操作**：支援 SDK 回傳的 `/` 指令選單、切換模型與 effort、調整 `/autocompact` 門檻、中斷執行，以及一鍵複製 `cd <cwd> && claude --resume <id>`。
 - **用量檢視**：顯示 context token 細項、autocompact 門檻，以及 5 小時／7 天方案用量。
-- **Plugin 管理**：透過 `claude plugin` 檢視、安裝、移除、啟用、停用 plugin 與新增 marketplace。
+- **工作中送出訊息**：可「加入佇列」等這一回合結束，或「引導」插進正在跑的回合；預設在設定裡選，長按送出（電腦用 Ctrl+Enter）單次改用另一種。
+- **App 內登入 Claude**：Claude Code 未登入或登入過期時，App 會提示並帶你完成登入，不用開終端機。
+- **擴充元件管理**：透過 `claude plugin` 檢視、安裝、移除、啟用、停用擴充元件與新增 marketplace。
 - **WSL 支援（Windows）**：路徑以 `/` 開頭的資料夾會自動在 WSL（`CC_REMOTE_WSL_DISTRO`，預設 `Ubuntu`）中執行。
 - **PWA**：可安裝至 iOS／Android 主畫面。
 
@@ -40,7 +42,7 @@
 ```
 
 - 伺服器僅監聽 `127.0.0.1`，不直接對區網或公網開 port。
-- App 狀態（session 索引、資料夾清單、偏好設定、密碼雜湊）存於 `data/state.json`，對話歷史直接讀取 `~/.claude/projects/`。
+- App 狀態（對話索引、資料夾清單、偏好設定、密碼雜湊）存於 `data/state.json`，對話歷史直接讀取 `~/.claude/projects/`。
 
 ## 系統需求
 
@@ -68,21 +70,21 @@ npm start
 CC_REMOTE_ORIGINS=https://cc.example.com npm start
 ```
 
-由於 `cc-remote` 等同於遠端操作本機環境，建議在 Tunnel 前端加上 **Cloudflare Access** 或 **Tailscale** 等身分驗證層，與 app 密碼形成雙層防護。詳見 [SECURITY.md](SECURITY.md)。
+由於 `imnotcc` 等同於遠端操作本機環境，建議在 Tunnel 前端加上 **Cloudflare Access** 或 **Tailscale** 等身分驗證層，與 app 密碼形成雙層防護。詳見 [SECURITY.md](SECURITY.md)。
 
 ## 背景常駐（Windows 工作排程器）
 
 在 Windows 上可透過 Task Scheduler 於登入時自動在背景啟動，不會跳出終端機視窗：
 
-1. 將 [scripts/run.example.cmd](scripts/run.example.cmd) 複製到 `%LOCALAPPDATA%\cc-remote\run.cmd`，再修改內容：
-   - **必改：** 把 `cd /d "C:\path\to\cc-remote"` 改成你 clone `cc-remote` 的資料夾。複製後腳本已不在專案內，若用 `%~dp0..` 這類相對路徑會指到 `%LOCALAPPDATA%`，`node server\index.js` 就會啟動失敗。
+1. 將 [scripts/run.example.cmd](scripts/run.example.cmd) 複製到 `%LOCALAPPDATA%\imnotcc\run.cmd`，再修改內容：
+   - **必改：** 把 `cd /d "C:\path\to\cc-remote"` 改成你 clone `imnotcc` 的資料夾。複製後腳本已不在專案內，若用 `%~dp0..` 這類相對路徑會指到 `%LOCALAPPDATA%`，`node server\index.js` 就會啟動失敗。
    - 修改 `CC_REMOTE_ORIGINS`。
 2. 在 PowerShell 註冊排程工作：
 
 ```powershell
 $action = New-ScheduledTaskAction `
   -Execute 'C:\Windows\System32\conhost.exe' `
-  -Argument "--headless C:\Windows\System32\cmd.exe /c `"$env:LOCALAPPDATA\cc-remote\run.cmd`""
+  -Argument "--headless C:\Windows\System32\cmd.exe /c `"$env:LOCALAPPDATA\imnotcc\run.cmd`""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $trigger.Delay = 'PT20S'
 $settings = New-ScheduledTaskSettingsSet `
@@ -91,7 +93,7 @@ $settings = New-ScheduledTaskSettingsSet `
   -RestartInterval (New-TimeSpan -Minutes 1) `
   -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
 
-Register-ScheduledTask -TaskName 'cc-remote' -Action $action -Trigger $trigger -Settings $settings
+Register-ScheduledTask -TaskName 'imnotcc' -Action $action -Trigger $trigger -Settings $settings
 ```
 
 - `conhost.exe --headless` 可避免登入時閃出命令提示字元視窗。
@@ -101,9 +103,9 @@ Register-ScheduledTask -TaskName 'cc-remote' -Action $action -Trigger $trigger -
 
 ```powershell
 npm run build
-Stop-ScheduledTask -TaskName 'cc-remote'
+Stop-ScheduledTask -TaskName 'imnotcc'
 Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object CommandLine -match 'server\\index\.js' | ForEach-Object { Stop-Process -Id $_.ProcessId }
-Start-ScheduledTask -TaskName 'cc-remote'
+Start-ScheduledTask -TaskName 'imnotcc'
 ```
 
 ## 環境變數
@@ -115,7 +117,7 @@ Start-ScheduledTask -TaskName 'cc-remote'
 | `CC_REMOTE_DATA_DIR` | `data/`（開發模式 `data/dev/`） | 存放 `state.json` 與初始 `password.txt` 的目錄。 |
 | `CC_REMOTE_PASSWORD` | 首次啟動隨機產生 | 尚未建立帳號紀錄時的初始登入密碼。 |
 | `CC_REMOTE_WSL_DISTRO` | `Ubuntu` | Windows 上路徑為 `/` 開頭時使用的 WSL 發行版名稱。 |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | **Windows** session 讀取 `settings.json` 與對話紀錄的 Claude Code 設定目錄。**WSL** session 不使用此變數，而是使用 WSL 內的 `~/.claude`（經由 `//wsl.localhost/<distro>` 讀取）。 |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | **Windows** 對話讀取 `settings.json` 與對話紀錄的 Claude Code 設定目錄。**WSL** 對話不使用此變數，而是使用 WSL 內的 `~/.claude`（經由 `//wsl.localhost/<distro>` 讀取）。 |
 
 ## 開發與測試
 

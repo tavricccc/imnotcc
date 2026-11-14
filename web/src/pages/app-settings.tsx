@@ -41,7 +41,7 @@ function NotificationSettings() {
   };
   if (!state) return null;
   return (
-    <ListGroup footer="每台裝置各自設定。正在看的 session 不會再跳通知。" title="通知">
+    <ListGroup footer="每台裝置各自設定。正在看的對話不會再跳通知。" title="通知">
       <SwitchRow checked={state === "on"} detail={PUSH_DETAIL[state]} disabled={busy || (state !== "on" && state !== "off")} label="推播通知" onChange={(on) => void toggle(on)} />
       {state === "on" ? <ListRow label="傳送測試通知" onClick={() => void testPush().catch((e) => toast.error((e as Error).message))} /> : null}
     </ListGroup>
@@ -60,7 +60,7 @@ function ProjectSessionsSettings({ limit }: { limit: typeof SESSION_LIMITS[numbe
       await removeLocalTranscripts(older.map(({ id }) => id));
       for (const { id } of older) clearCache(`/api/sessions/${id}`);
       setOpen(false);
-      toast.success(older.length ? "已清理舊 session 的本機快取" : "沒有超過保留數量的 session");
+      toast.success(older.length ? "已清理舊對話的本機快取" : "沒有超過保留數量的對話");
     } catch {
       toast.error("無法清理本機快取，請再試一次。");
     } finally {
@@ -70,18 +70,18 @@ function ProjectSessionsSettings({ limit }: { limit: typeof SESSION_LIMITS[numbe
 
   return (
     <>
-      <ListGroup footer="依最後更新時間顯示。設定保留數量後，可清理超出數量的本機快取。" title="專案 Session">
+      <ListGroup footer="依最後更新時間顯示。設定保留數量後，可清理超出數量的本機快取。" title="專案對話">
         <PickerRow label="每個專案保留最新" onChange={(projectSessionLimit) => prefs.set({ projectSessionLimit })} options={sessionLimitOptions} value={limit} />
-        <ListRow disabled={limit === "all" || busy} icon={<Trash />} label="清理舊 session 的本機快取" onClick={() => setOpen(true)} />
+        <ListRow disabled={limit === "all" || busy} icon={<Trash />} label="清理舊對話的本機快取" onClick={() => setOpen(true)} />
       </ListGroup>
       <ConfirmDialog
         confirmLabel="清理"
-        description={`每個專案會保留最新 ${limit} 個 session 的本機快取。伺服器上的 session 與對話記錄會保留。`}
+        description={`每個專案會保留最新 ${limit} 個對話的本機快取。伺服器上的對話與對話記錄會保留。`}
         onConfirm={() => void clean()}
         onOpenChange={setOpen}
         open={open}
         status={busy ? "loading" : "idle"}
-        title="清理舊 session 的本機快取？"
+        title="清理舊對話的本機快取？"
         tone="danger"
       />
     </>
@@ -253,9 +253,9 @@ function DesktopSettings() {
 
   return (
     <>
-      <ListGroup footer={`cc-remote 桌面版 v${st.app_version} · ${nodeDetail}`} title="桌面端連線">
+      <ListGroup footer={`imnotcc 桌面版 v${st.app_version} · ${nodeDetail}`} title="桌面端連線">
         <ListRow detail={modeDetail} icon={st.config.local ? <Desktop /> : <Globe />} label="目前模式" />
-        <ListRow detail="切換為 Client，連到其他電腦上的 cc-remote" icon={<Link />} label="連到遠端 Server…" onClick={() => setRemoteOpen(true)} />
+        <ListRow detail="切換為 Client，連到其他電腦上的 imnotcc" icon={<Link />} label="連到遠端 Server…" onClick={() => setRemoteOpen(true)} />
         {!st.config.local ? (
           <ListRow
             detail={nodeOk ? "在這台電腦安裝並啟動本機 Server" : `${nodeDetail}，請先安裝 Node.js 20 以上`}
@@ -321,7 +321,7 @@ function DesktopSettings() {
         ) : null}
       </ListGroup>
 
-      <Sheet description="輸入要連線的 cc-remote 伺服器網址（例如 https://cc.example.com）。" onOpenChange={setRemoteOpen} open={remoteOpen} title="連到遠端 Server">
+      <Sheet description="輸入要連線的 imnotcc 伺服器網址（例如 https://cc.example.com）。" onOpenChange={setRemoteOpen} open={remoteOpen} title="連到遠端 Server">
         <form className="grid gap-4 pb-2" onSubmit={submitRemote}>
           <Field error={remoteErr} label="Server 網址">
             {({ describedBy, id, invalid }) => (
@@ -332,7 +332,7 @@ function DesktopSettings() {
         </form>
       </Sheet>
 
-      <Sheet description="有變更時會重啟本機 Server 套用，執行中的 session 會中斷幾秒。新的 port 起不來會自動恢復原設定。" onOpenChange={setHostOpen} open={hostOpen} title="本機 Server 設定">
+      <Sheet description="有變更時會重啟本機 Server 套用，執行中的對話會中斷幾秒。新的 port 起不來會自動恢復原設定。" onOpenChange={setHostOpen} open={hostOpen} title="本機 Server 設定">
         <form className="grid gap-4 pb-2" onSubmit={saveHostSettings}>
           <Field label="連接埠（Port）">
             {({ id }) => <Input id={id} max={65535} min={1} onChange={(e) => setPort(e.target.value)} required type="number" value={port} />}
@@ -363,7 +363,7 @@ function ClaudeAccountSettings() {
   if (!targets.length) return null;
   return (
     <>
-      <ListGroup footer="Server 電腦上 Claude Code 的登入。Windows 和 WSL 的 session 各自登入。" title="Claude 帳號">
+      <ListGroup footer="Server 電腦上 Claude Code 的登入。Windows 和 WSL 的對話各自登入。" title="Claude 帳號">
         {targets.map((t) => {
           const s = status[t]!;
           const detail = s.loggedIn === null ? (s.error ?? "讀不到狀態")
