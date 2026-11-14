@@ -3,7 +3,8 @@ import type { Item } from "./transcript";
 export type TurnRow =
   | { kind: "item"; item: Item }
   | { kind: "work"; key: string; items: Item[]; start?: number; end?: number; live: boolean }
-  | { kind: "files"; key: string; turn: string; files: FileChange[] };
+  | { kind: "files"; key: string; turn: string; files: FileChange[] }
+  | { kind: "copy"; key: string; text: string };
 
 /** A file a turn changed, as git counted it; binary files have no line counts. */
 export interface FileChange { path: string; added: number | null; removed: number | null }
@@ -23,6 +24,9 @@ export function turnRows(items: Item[], running: boolean, changes: Record<string
     while (j < items.length && items[j].type !== "user") j++;
     const segment = items.slice(i, j);
     const last = segment.findLastIndex(isStep);
+    // The answer the turn ended with, copyable once the turn is over.
+    const answer = segment.slice(last + 1).filter((it) => it.type === "assistant" && it.text?.trim()).map((it) => it.text!.trim()).join("\n\n");
+    const over = !(running && j === items.length);
     if (last < 0) {
       for (const item of segment) out.push({ kind: "item", item });
     } else {
@@ -33,6 +37,7 @@ export function turnRows(items: Item[], running: boolean, changes: Record<string
       const files = prompt ? changes[prompt] : undefined;
       if (prompt && files?.length && !live) out.push({ kind: "files", key: `files-${segment[0].key}`, turn: prompt, files });
     }
+    if (answer && over) out.push({ kind: "copy", key: `copy-${segment[0].key}`, text: answer });
     i = j;
   }
   return out;

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  ArrowClockwise, ArrowsInLineVertical, CaretLeft, DotsThree, GitBranch, PencilSimple,
+  ArrowClockwise, ArrowsInLineVertical, CaretLeft, Check, Copy, DotsThree, GitBranch, PencilSimple,
   Sparkle, Terminal, Trash,
 } from "@phosphor-icons/react/ssr";
 import { del, get, post } from "@/lib/api";
@@ -26,7 +26,7 @@ import { PreviewPanel, useWidePreview } from "@/components/preview-panel";
 import { PermissionCard, type Answer, type PermissionRequest } from "@/components/permission-card";
 import { ToolCard } from "@/components/tool-card";
 import { FilesCard, TurnWork } from "@/components/turn";
-import { turnRows, type FileChange } from "@/lib/turns";
+import { isStep, turnRows, type FileChange } from "@/lib/turns";
 import { prefs } from "@/lib/prefs";
 import { Meter, UsageRing } from "@/components/usage-ring";
 import { Button } from "@/ui/button";
@@ -463,10 +463,12 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
               <Button className="justify-self-center" onClick={() => void loadEarlier()} size="sm" status={page.loadingEarlier ? "loading" : "idle"} variant="ghost">載入更早的訊息</Button>
             ) : null}
             {(() => {
-              const items = hideWork ? t.items.filter((it) => it.type !== "tool" && it.type !== "thinking") : t.items;
+              const items = (hideWork ? t.items.filter((it) => it.type !== "tool" && it.type !== "thinking") : t.items)
+                .filter((it, i, all) => !(isInterrupt(it) && isInterrupt(all.slice(0, i).findLast((p) => !isStep(p)))));
               if (!view.groupTools) return items.map((item) => <Entry bubbles={view.bubbles} item={item} key={item.key} />);
               return turnRows(items, running, changes).map((row) => row.kind === "work"
                 ? <TurnWork end={row.end} items={row.items} key={row.key} live={row.live} start={row.start} />
+                : row.kind === "copy" ? <CopyTurn key={row.key} text={row.text} />
                 : row.kind === "files" ? <FilesCard files={row.files} key={row.key} onOpen={(path) => openPreview({ kind: "diff", session: id, turn: row.turn, path, files: row.files })} />
                 : <Entry bubbles={view.bubbles} item={row.item} key={row.item.key} />);
             })()}
@@ -624,11 +626,34 @@ function Entry({ bubbles, item }: { bubbles: boolean; item: Item }) {
       return <ToolCard tool={item} />;
     default:
       return (
-        <p className={cn("content-in justify-self-center whitespace-pre-wrap text-center text-[0.8125rem] text-ink-muted", item.error && "text-danger", item.command && "font-mono")}>
+        <p className={cn("content-in whitespace-pre-wrap text-[0.8125rem] text-ink-muted", item.command ? "max-w-[85%] justify-self-end text-right font-mono" : "justify-self-start", item.error && "text-danger")}>
           {item.text}
         </p>
       );
   }
+}
+
+const isInterrupt = (it?: Item) => !!it && it.type === "note" && it.text === "已中斷";
+
+/** A small button under a finished turn that copies the answer it ended with. */
+function CopyTurn({ text }: { text: string }) {
+  const [done, setDone] = React.useState(false);
+  React.useEffect(() => {
+    if (!done) return;
+    const timer = window.setTimeout(() => setDone(false), 1500);
+    return () => window.clearTimeout(timer);
+  }, [done]);
+  return (
+    <button
+      aria-label="複製回覆"
+      className="-mt-2 grid size-7 place-items-center justify-self-start rounded-md text-ink-faint outline-none transition-colors duration-[var(--motion-control)] hover:bg-surface-raised hover:text-ink-muted focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
+      onClick={() => { navigator.clipboard.writeText(text).then(() => setDone(true), () => {}); }}
+      title="複製"
+      type="button"
+    >
+      {done ? <Check className="size-4" weight="bold" /> : <Copy className="size-4" />}
+    </button>
+  );
 }
 
 /** The auto-compact window for this session's model, sent as /autocompact. */
