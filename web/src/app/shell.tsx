@@ -1,16 +1,20 @@
 import * as React from "react";
-import { CaretLeft, CaretRight, ChatsCircle, GearSix, PuzzlePiece } from "@phosphor-icons/react/ssr";
+import { CaretLeft, CaretRight, ChatsCircle, GearSix, PuzzlePiece, SlidersHorizontal } from "@phosphor-icons/react/ssr";
+import { navigate } from "@/lib/app-navigation";
 import { prefs } from "@/lib/prefs";
 import { useStore } from "@/lib/store-core";
 import { cn } from "@/lib/utils";
-import { Button } from "@/ui/button";
 import { EdgeBlur } from "@/ui/edge-blur";
 import { PrimaryNav, type NavItem } from "@/ui/nav";
 
-const ITEMS: NavItem[] = [
+const RAIL_ITEMS: NavItem[] = [
   { href: "/", icon: ChatsCircle, label: "Session" },
   { href: "/plugins", icon: PuzzlePiece, label: "Plugin" },
-  { href: "/settings", icon: GearSix, label: "設定" },
+  { href: "/settings", icon: SlidersHorizontal, label: "Agent 設定" },
+];
+const DOCK_ITEMS: NavItem[] = [
+  ...RAIL_ITEMS,
+  { href: "/app", icon: GearSix, label: "App 設定" },
 ];
 const MIN_SIDEBAR_WIDTH = 232;
 const MAX_SIDEBAR_WIDTH = 420;
@@ -55,14 +59,39 @@ export function AppShell({ active, bare, children, dock, sessions }: {
         "--sidebar-motion": dragWidth === null ? "var(--motion-nav)" : "0ms",
         "--desktop-inset": showSessions ? "calc(var(--rail-width) + var(--session-sidebar-width))" : "var(--rail-width)",
       } as React.CSSProperties}>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--rail-width)] flex-col items-center gap-4 border-r border-line py-4 md:flex">
-        <img alt="cc-remote" className="size-8 rounded-icon" src="/icon.svg" />
-        <PrimaryNav activeHref={active} items={ITEMS} label="主選單" variant="rail" />
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--rail-width)] flex-col items-center gap-4 border-r border-line pb-4 pt-[calc(var(--safe-top)+1rem)] md:flex">
         {sessions ? (
-          <Button aria-controls="session-sidebar" aria-expanded={showSessions} aria-label={toggleLabel} className="mt-auto" onClick={sessions.toggle} size="icon-sm" title={toggleLabel} variant="ghost">
-            {showSessions ? <CaretLeft weight="bold" /> : <CaretRight weight="bold" />}
-          </Button>
-        ) : null}
+          <button
+            aria-controls="session-sidebar"
+            aria-expanded={showSessions}
+            aria-label={toggleLabel}
+            className="group relative grid size-8 cursor-pointer place-items-center rounded-icon text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink focus-visible:bg-surface-hover focus-visible:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+            onClick={sessions.toggle}
+            title={toggleLabel}
+            type="button"
+          >
+            <img alt="" className="size-8 rounded-icon transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0" src="/icon.svg" />
+            <span aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
+              {showSessions ? <CaretLeft size={16} weight="bold" /> : <CaretRight size={16} weight="bold" />}
+            </span>
+          </button>
+        ) : (
+          <img alt="cc-remote" className="size-8 rounded-icon" src="/icon.svg" />
+        )}
+        <PrimaryNav activeHref={active} items={RAIL_ITEMS} label="主選單" variant="rail" />
+        <button
+          aria-current={active === "/app" ? "page" : undefined}
+          aria-label="App 設定"
+          className={cn(
+            "mt-auto grid size-9 cursor-pointer place-items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            active === "/app" ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-surface-hover hover:text-ink",
+          )}
+          onClick={() => navigate("/app")}
+          title="App 設定"
+          type="button"
+        >
+          <GearSix size={20} weight={active === "/app" ? "fill" : "regular"} />
+        </button>
       </aside>
       {sessions ? (
         <aside aria-label="Session 清單" className={cn(
@@ -108,7 +137,7 @@ export function AppShell({ active, bare, children, dock, sessions }: {
       {bare ? children : (
         <main
           className={cn(
-            "mx-auto w-full max-w-3xl px-[var(--gutter)] pt-[calc(var(--safe-top)+1.5rem)] md:px-8 md:pb-12 md:pt-10",
+            "mx-auto w-full max-w-3xl px-[var(--gutter)] pt-[calc(var(--safe-top)+1.5rem)] md:px-8 md:pb-12 md:pt-[calc(var(--safe-top)+2.5rem)]",
             dock ? "pb-[calc(var(--bottom-nav-height)+var(--bottom-nav-gap)+1.5rem)]" : "pb-[max(2rem,var(--safe-bottom))]",
           )}
         >
@@ -132,7 +161,7 @@ export function AppShell({ active, bare, children, dock, sessions }: {
         )}
         inert={!dock}
       >
-        <PrimaryNav activeHref={active} items={ITEMS} label="主選單" variant="dock" />
+        <PrimaryNav activeHref={active} items={DOCK_ITEMS} label="主選單" variant="dock" />
       </div>
     </div>
   );

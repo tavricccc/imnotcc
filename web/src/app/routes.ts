@@ -10,11 +10,12 @@ export type Screen =
   | { name: "settings" }
   | { name: "settings-defaults" }
   | { name: "settings-folders" }
-  | { name: "settings-compact" };
+  | { name: "settings-compact" }
+  | { name: "app-settings" };
 
 export interface Route { screen: Screen; tab: string; tabIndex: number; depth: number }
 
-const TABS = ["/", "/plugins", "/settings"];
+const TABS = ["/", "/plugins", "/settings", "/app"];
 
 export function parseRoute(path: string): Route {
   const at = (screen: Screen, tab: string, depth: number): Route => ({ depth, screen, tab, tabIndex: TABS.indexOf(tab) });
@@ -38,6 +39,7 @@ export function parseRoute(path: string): Route {
     case "/settings/defaults": return at({ name: "settings-defaults" }, "/settings", 1);
     case "/settings/folders": return at({ name: "settings-folders" }, "/settings", 1);
     case "/settings/compact": return at({ name: "settings-compact" }, "/settings", 1);
+    case "/app": return at({ name: "app-settings" }, "/app", 0);
     default: return at({ name: "sessions" }, "/", 0);
   }
 }

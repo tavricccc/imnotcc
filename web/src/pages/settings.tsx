@@ -1,25 +1,20 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { ArrowsInLineVertical, Clock, FolderSimple, FolderSimplePlus, Key, Plus, SignOut, SlidersHorizontal, Trash, X } from "@phosphor-icons/react/ssr";
-import { auth, del, post, put } from "@/lib/api";
-import { clearCache } from "@/lib/cache";
+import { ArrowsInLineVertical, Clock, FolderSimple, FolderSimplePlus, Plus, SlidersHorizontal, Trash, X } from "@phosphor-icons/react/ssr";
+import { del, post, put } from "@/lib/api";
 import { EFFORTS, MODES, WINDOWS, baseName, modeLabel, tokens } from "@/lib/format";
-import { removeLocalTranscripts } from "@/lib/local-transcript";
 import { shared } from "@/lib/store";
 import { useStore } from "@/lib/store-core";
 import { Button } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Field, Input } from "@/ui/field";
 import { ListGroup, ListRow } from "@/ui/list";
-import { ChoiceRow, NumberRow, PickerRow, SwitchRow } from "@/ui/list-controls";
-import { prefs, SESSION_LIMITS } from "@/lib/prefs";
-import { disablePush, enablePush, push, refreshPush, testPush, type PushState } from "@/lib/push";
-import { readCompactWindows, readSessions, useCompactWindows, type ClaudeEnv, useFolders, useSettings, type Settings } from "@/lib/resources";
+import { ChoiceRow, NumberRow, PickerRow } from "@/ui/list-controls";
+import { readCompactWindows, type ClaudeEnv, useFolders, useSettings, type Settings } from "@/lib/resources";
 import { ErrorState, LoadingList, PageHeader } from "@/ui/page";
 import { Sheet } from "@/ui/sheet";
 
 const DEFAULT = "__default";
-const sessionLimitOptions = SESSION_LIMITS.map((value) => ({ value, label: value === "all" ? "不限" : `${value} 個` }));
 
 async function saveSettings(patch: Partial<Settings>) {
   try {
@@ -32,42 +27,13 @@ async function saveSettings(patch: Partial<Settings>) {
   }
 }
 
-// ---- 設定 ----
-
-const PUSH_DETAIL: Record<PushState, string> = {
-  "unsupported": "這個瀏覽器不支援推播通知",
-  "needs-install": "iPhone 要先「加入主畫面」，從主畫面打開才能開啟通知",
-  "denied": "通知被瀏覽器封鎖了，到系統或瀏覽器設定裡允許",
-  "off": "回合完成、需要你確認或發生錯誤時通知你",
-  "on": "回合完成、需要你確認或發生錯誤時通知你",
-};
-
-function NotificationSettings() {
-  const { state } = useStore(push);
-  const [busy, setBusy] = React.useState(false);
-  React.useEffect(() => { void refreshPush(); }, []);
-  const toggle = async (on: boolean) => {
-    setBusy(true);
-    try { await (on ? enablePush() : disablePush()); }
-    catch (e) { toast.error(`通知設定失敗：${(e as Error).message}`); }
-    finally { setBusy(false); }
-  };
-  if (!state) return null;
-  return (
-    <ListGroup footer="每台裝置各自設定。正在看的 session 不會再跳通知。" title="通知">
-      <SwitchRow checked={state === "on"} detail={PUSH_DETAIL[state]} disabled={busy || (state !== "on" && state !== "off")} label="推播通知" onChange={(on) => void toggle(on)} />
-      {state === "on" ? <ListRow label="傳送測試通知" onClick={() => void testPush().catch((e) => toast.error((e as Error).message))} /> : null}
-    </ListGroup>
-  );
-}
+// ---- Agent 設定 ----
 
 export function SettingsPage() {
   const s = useSettings();
   const f = useFolders();
   const w = useCompactWindows();
   const [idle, setIdle] = React.useState<number>();
-  const [passwordOpen, setPasswordOpen] = React.useState(false);
-  const [logoutOpen, setLogoutOpen] = React.useState(false);
   React.useEffect(() => { if (s.data) setIdle(s.data.idleMinutes); }, [s.data]);
   // Saved once typing pauses, so each keystroke is not its own save.
   React.useEffect(() => {
@@ -79,17 +45,15 @@ export function SettingsPage() {
     return () => clearTimeout(timer);
   }, [idle, s.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const view = useStore(prefs);
   const st = s.data;
   const fold = f.data;
   const win = w.data;
   const error = s.error || f.error || w.error;
   const retry = () => { void s.reload(); void f.reload(); void w.reload(); };
-  // A failed read still leaves the device settings usable, so only the server's own groups stop.
-  const set = win?.windows.filter((x) => x.window).length ?? 0;
+  const set = win?.windows?.filter((x) => x.window).length ?? 0;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader title="設定" />
+      <PageHeader title="Agent 設定" />
       {error ? <ErrorState message={error} onRetry={retry} retryLabel="重試" title="讀不到設定" /> : null}
 
       {!st && !error ? <LoadingList label="載入中" rows={1} /> : null}
@@ -100,16 +64,6 @@ export function SettingsPage() {
           <ListRow href="/settings/compact" icon={<ArrowsInLineVertical />} label="自動壓縮門檻" value={set ? `${set} 個模型` : "預設"} />
         </ListGroup>
       ) : null}
-
-      <ListGroup footer="只存在這個裝置上。" title="對話顯示">
-        <SwitchRow checked={view.groupTools} detail="每個回合的工作過程收成「處理了幾分鐘」，只留最後的回覆和改過的檔案" label="折疊工作過程" onChange={(v) => prefs.set({ groupTools: v })} />
-        <SwitchRow checked={view.bubbles} label="回覆用對話氣泡" onChange={(v) => prefs.set({ bubbles: v })} />
-        <SwitchRow checked={view.hideWork} detail="只留你和 Claude 的對話，執行中會顯示正在用的工具" disabled={!view.bubbles} label="氣泡模式隱藏思考和工具" onChange={(v) => prefs.set({ hideWork: v })} />
-      </ListGroup>
-
-      <NotificationSettings />
-
-      <ProjectSessionsSettings limit={view.projectSessionLimit} />
 
       {!st && !error ? <LoadingList label="載入中" rows={1} /> : null}
       {st ? (
@@ -124,98 +78,7 @@ export function SettingsPage() {
           />
         </ListGroup>
       ) : null}
-
-      <ListGroup title="帳號">
-        <ListRow icon={<Key />} label="更改密碼" onClick={() => setPasswordOpen(true)} />
-        <ListRow icon={<SignOut />} label="登出" onClick={() => setLogoutOpen(true)} tone="danger" />
-      </ListGroup>
-
-      <PasswordSheet onOpenChange={setPasswordOpen} open={passwordOpen} />
-      <ConfirmDialog
-        confirmLabel="登出"
-        description="這個裝置要再輸入密碼才能進來。"
-        onConfirm={() => void post("/api/logout").then(() => auth.set({ authed: false }))}
-        onOpenChange={setLogoutOpen}
-        open={logoutOpen}
-        title="登出？"
-        tone="danger"
-      />
     </div>
-  );
-}
-
-function ProjectSessionsSettings({ limit }: { limit: typeof SESSION_LIMITS[number] }) {
-  const [open, setOpen] = React.useState(false);
-  const [busy, setBusy] = React.useState(false);
-
-  async function clean() {
-    setBusy(true);
-    try {
-      const { groups } = await readSessions();
-      const older = groups.flatMap(({ sessions }) => sessions.slice(Number(limit)));
-      await removeLocalTranscripts(older.map(({ id }) => id));
-      for (const { id } of older) clearCache(`/api/sessions/${id}`);
-      setOpen(false);
-      toast.success(older.length ? "已清理舊 session 的本機快取" : "沒有超過保留數量的 session");
-    } catch {
-      toast.error("無法清理本機快取，請再試一次。");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <>
-      <ListGroup footer="依最後更新時間顯示。設定保留數量後，可清理超出數量的本機快取。" title="專案 Session">
-        <PickerRow label="每個專案保留最新" onChange={(projectSessionLimit) => prefs.set({ projectSessionLimit })} options={sessionLimitOptions} value={limit} />
-        <ListRow disabled={limit === "all" || busy} icon={<Trash />} label="清理舊 session 的本機快取" onClick={() => setOpen(true)} />
-      </ListGroup>
-      <ConfirmDialog
-        confirmLabel="清理"
-        description={`每個專案會保留最新 ${limit} 個 session 的本機快取。伺服器上的 session 與對話記錄會保留。`}
-        onConfirm={() => void clean()}
-        onOpenChange={setOpen}
-        open={open}
-        status={busy ? "loading" : "idle"}
-        title="清理舊 session 的本機快取？"
-        tone="danger"
-      />
-    </>
-  );
-}
-
-function PasswordSheet({ onOpenChange, open }: { onOpenChange: (o: boolean) => void; open: boolean }) {
-  const [current, setCurrent] = React.useState("");
-  const [next, setNext] = React.useState("");
-  const [error, setError] = React.useState<string>();
-  const [busy, setBusy] = React.useState(false);
-  React.useEffect(() => { if (open) { setCurrent(""); setNext(""); setError(undefined); } }, [open]);
-
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setError(undefined);
-    try {
-      await post("/api/password", { current, next });
-      onOpenChange(false);
-      toast.success("已更新密碼，其他裝置要重新登入");
-    } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-  }
-
-  return (
-    <Sheet description="改完之後，其他裝置都要重新登入。" onOpenChange={onOpenChange} open={open} title="更改密碼">
-      <form className="grid gap-4 pb-2" onSubmit={submit}>
-        <Field label="目前的密碼">
-          {({ id }) => <Input autoComplete="current-password" id={id} onChange={(e) => setCurrent(e.target.value)} type="password" value={current} />}
-        </Field>
-        <Field error={error} hint="至少 8 個字元" label="新密碼">
-          {({ describedBy, id, invalid }) => (
-            <Input aria-describedby={describedBy} aria-invalid={invalid || undefined} autoComplete="new-password" id={id} onChange={(e) => setNext(e.target.value)} type="password" value={next} />
-          )}
-        </Field>
-        <Button disabled={!current || next.length < 8} size="lg" status={busy ? "loading" : "idle"} type="submit" variant="primary">更改密碼</Button>
-      </form>
-    </Sheet>
   );
 }
 
@@ -236,7 +99,7 @@ export function DefaultsPage() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader back={{ href: "/settings", label: "設定" }} description="開新 session 時先用這些，之後可以在 session 裡改。" title="新 session 的預設值" />
+      <PageHeader back={{ href: "/settings", label: "Agent 設定" }} description="開新 session 時先用這些，之後可以在 session 裡改。" title="新 session 的預設值" />
       {error ? <ErrorState message={error} onRetry={() => { void s.reload(); void f.reload(); }} retryLabel="重試" title="讀不到設定" />
         : !d ? <LoadingList label="載入中" rows={2} />
         : (
@@ -279,7 +142,7 @@ export function FoldersPage() {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader
         actions={<Button aria-label="加入資料夾" onClick={() => setAddOpen(true)} size="icon" variant="primary"><Plus weight="bold" /></Button>}
-        back={{ href: "/settings", label: "設定" }}
+        back={{ href: "/settings", label: "Agent 設定" }}
         title="資料夾"
       />
       {res.error ? <ErrorState message={res.error} onRetry={res.reload} retryLabel="重試" title="讀不到資料夾" />
@@ -352,7 +215,7 @@ export function CompactPage() {
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <PageHeader back={{ href: "/settings", label: "設定" }} description="寫在 Claude Code 的 settings.json，電腦上也一起生效。Windows 和 WSL 各有自己的 settings.json，分開設定。" title="自動壓縮門檻" />
+      <PageHeader back={{ href: "/settings", label: "Agent 設定" }} description="寫在 Claude Code 的 settings.json，電腦上也一起生效。Windows 和 WSL 各有自己的 settings.json，分開設定。" title="自動壓縮門檻" />
       {res.error ? <ErrorState message={res.error} onRetry={res.reload} retryLabel="重試" title="讀不到門檻" />
         : !res.data ? <LoadingList label="載入中" rows={2} />
         : (

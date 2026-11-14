@@ -441,7 +441,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   return (
     <SessionContext.Provider value={id}>
     <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:left-[var(--desktop-inset)] motion-safe:transition-[left,right] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace} style={sidePreview ? { right: "var(--preview-width, 0px)" } : undefined}>
-      <header className="pointer-events-none relative z-30 shrink-0 px-[var(--gutter)] pt-[calc(var(--safe-top)+0.5rem)] md:px-8 md:pt-4 [&>div]:pointer-events-auto" ref={header}>
+      <header className="pointer-events-none relative z-30 shrink-0 px-[var(--gutter)] pt-[calc(var(--safe-top)+0.5rem)] md:px-8 md:pt-[calc(var(--safe-top)+1rem)] [&>div]:pointer-events-auto" ref={header}>
         <div className="glass-float mx-auto flex max-w-3xl items-center gap-2 rounded-full p-1.5">
           <Button aria-label="返回" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
           <button className="min-w-0 flex-1 rounded-full px-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]" onClick={() => setSheet("options")} type="button">

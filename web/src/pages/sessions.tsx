@@ -112,7 +112,7 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
 
   return (
     <div className={sidebar ? "flex h-full min-h-0 flex-col" : "grid grid-cols-[minmax(0,1fr)] gap-6"}>
-      <div className={sidebar ? "grid shrink-0 gap-3 px-3 pb-3 pt-4" : "contents"}>
+      <div className={sidebar ? "grid shrink-0 gap-3 px-3 pb-3 pt-[calc(var(--safe-top)+1rem)]" : "contents"}>
         {sidebar ? (
           <header className="flex items-center justify-between gap-2 pl-1">
             <h2 className="text-base font-semibold">Session</h2>

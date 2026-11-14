@@ -7,8 +7,10 @@ import { startShared } from "@/lib/store";
 import { useStore } from "@/lib/store-core";
 import { Toaster } from "@/ui/feedback";
 import { Lightbox } from "@/components/lightbox";
+import { Titlebar } from "@/components/titlebar";
 import { Pane, useStepDirection } from "@/ui/pane";
 import { useCompactViewport } from "@/ui/use-compact-viewport";
+import { AppSettingsPage } from "@/pages/app-settings";
 import { ChatPage } from "@/pages/chat";
 import { LoginPage } from "@/pages/login";
 import { NewSessionPage } from "@/pages/new-session";
@@ -28,6 +30,7 @@ function ScreenView({ screen }: { screen: Screen }) {
     case "settings-defaults": return <DefaultsPage />;
     case "settings-folders": return <FoldersPage />;
     case "settings-compact": return <CompactPage />;
+    case "app-settings": return <AppSettingsPage />;
     default: return <SessionsPage />;
   }
 }
@@ -57,8 +60,8 @@ export function App() {
   // A new screen starts at its top; a step back to a list does too, which is what a phone does.
   React.useLayoutEffect(() => { window.scrollTo(0, 0); }, [path]);
 
-  if (!checked) return null;
-  if (!authed) return <LoginPage />;
+  if (!checked) return <Titlebar />;
+  if (!authed) return <><Titlebar /><LoginPage /></>;
   const screen = sessionId ? (
     <ChatPage firstPrompt={firstPrompt?.id === sessionId ? firstPrompt : undefined} id={sessionId} key={sessionId} onRename={() => setSessionRevision((revision) => revision + 1)} slideIn={compact && direction > 0} />
   ) : showDraft ? (
@@ -69,6 +72,7 @@ export function App() {
   ) : <ScreenView screen={route.screen} />;
   return (
     <>
+      <Titlebar />
       <AppShell active={route.tab} bare={!!sessionId || showDraft} dock={route.depth === 0} sessions={desktopSessions ? {
         collapsed: sessionSidebarCollapsed,
         content: <SessionsPage activeId={sessionId} revision={sessionRevision} sidebar />,

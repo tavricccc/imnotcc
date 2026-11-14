@@ -1,5 +1,6 @@
 import * as React from "react";
 import { auth, post } from "@/lib/api";
+import { isTauri, tauriInvoke } from "@/lib/tauri";
 import { Button } from "@/ui/button";
 import { Field, Input } from "@/ui/field";
 import { Panel } from "@/ui/panel";
@@ -47,6 +48,9 @@ export function LoginPage() {
             )}
           </Field>
           <Button disabled={!password} size="lg" status={busy ? "loading" : "idle"} type="submit" variant="primary">登入</Button>
+          {isTauri() ? (
+            <Button onClick={() => void tauriInvoke("open_setup")} size="sm" type="button" variant="ghost">切換 Server / 初始設定</Button>
+          ) : null}
         </Panel>
       </form>
     </main>

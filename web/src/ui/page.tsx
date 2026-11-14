@@ -38,7 +38,7 @@ export function PageHeader({ actions, back, className, description, title }: {
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[calc(var(--safe-top)+2.75rem)] items-end justify-center px-16 pb-2.5 transition-[opacity,translate] duration-[var(--motion-control)] ease-[var(--ease-move)] md:left-[var(--desktop-inset,0px)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)] md:h-14",
+        "pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[calc(var(--safe-top)+2.75rem)] items-end justify-center px-16 pb-2.5 transition-[opacity,translate] duration-[var(--motion-control)] ease-[var(--ease-move)] md:left-[var(--desktop-inset,0px)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)] md:h-[calc(var(--safe-top)+3.5rem)]",
         collapsed ? "opacity-100" : "-translate-y-1 opacity-0",
       )}
     >
