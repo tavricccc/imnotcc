@@ -102,7 +102,12 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const [s, setS] = React.useState<LiveState>({ status: firstPrompt ? "running" : "idle", open: false, draft: "", pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
   const [effortAsk, setEffortAsk] = React.useState<string | null>(null); // effort waiting for a restart to be confirmed
   const [effortStatus, setEffortStatus] = React.useState<ActionStatus>("idle");
-  const [text, setText] = React.useState("");
+  // What was typed but not sent stays with this session, across leaving it and reloading.
+  const draftKey = `ccr:composer:${id}`;
+  const [text, setText] = React.useState(() => { try { return localStorage.getItem(draftKey) ?? ""; } catch { return ""; } });
+  React.useEffect(() => {
+    try { if (text) localStorage.setItem(draftKey, text); else localStorage.removeItem(draftKey); } catch { /* storage full or blocked */ }
+  }, [draftKey, text]);
   const [sheet, setSheet] = React.useState<SheetName>(null);
   const [menuIndex, setMenuIndex] = React.useState(0);
   const [images, setImages] = React.useState<PickedImage[]>([]);
