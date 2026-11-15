@@ -2,6 +2,7 @@ import * as React from "react";
 import { Plus, X } from "@phosphor-icons/react/ssr";
 import { readImage, type PickedImage } from "@/lib/prompt";
 import { Button } from "@/ui/button";
+import { openImage } from "./lightbox";
 
 export function PromptImages({ disabled, images, onRemove }: {
   disabled?: boolean; images: PickedImage[]; onRemove: (index: number) => void;
@@ -11,7 +12,7 @@ export function PromptImages({ disabled, images, onRemove }: {
     <div className="message-in mb-2 flex gap-2 overflow-x-auto p-1.5">
       {images.map((img, index) => (
         <div className="relative shrink-0" key={index}>
-          <img alt="" className="size-16 rounded-tile object-cover shadow-panel" src={img.url} />
+          <button aria-label="放大圖片" className="block rounded-tile outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]" onClick={() => openImage(img.url)} type="button"><img alt="" className="size-16 rounded-tile object-cover shadow-panel" src={img.url} /></button>
           <button aria-label="移除圖片" className="absolute -right-1.5 -top-1.5 grid size-6 place-items-center rounded-full bg-contrast text-on-contrast shadow-float disabled:opacity-40" disabled={disabled} onClick={() => onRemove(index)} type="button">
             <X className="size-3" weight="bold" />
           </button>

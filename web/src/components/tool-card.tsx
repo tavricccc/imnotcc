@@ -10,7 +10,6 @@ import { FileIcon } from "./file-icon";
 import { SessionContext } from "@/lib/session-images";
 import { resolveFile, type FileInfo } from "@/lib/file-mentions";
 import { openPreview } from "@/lib/preview";
-import { useCompactViewport } from "@/ui/use-compact-viewport";
 import { baseName } from "@/lib/format";
 import { DiffRows, editRows } from "./diff-view";
 
@@ -70,7 +69,6 @@ export function Reveal({ children, open }: { children: React.ReactNode; open: bo
 /** What a step took in and gave back: the full thought, or a tool's input and output. */
 export function ToolDetail({ tool }: { tool: Item }) {
   const [full, setFull] = React.useState(false);
-  const compact = useCompactViewport();
   if (tool.type === "thinking") {
     return <p className="whitespace-pre-wrap rounded-tile bg-surface-raised p-3 text-sm leading-relaxed text-ink-muted [overflow-wrap:anywhere]" data-selectable="">{tool.text}</p>;
   }
@@ -79,7 +77,7 @@ export function ToolDetail({ tool }: { tool: Item }) {
   return (
     <div className="grid min-w-0 gap-2" data-selectable="">
       {typeof tool.input?.file_path === "string" ? <FilePath path={tool.input.file_path} /> : null}
-      {change ? <DiffRows compact={compact} name={String(tool.input?.file_path ?? "")} rows={editRows(change)} /> : <pre className={codeClass}>{inputText(tool)}</pre>}
+      {change ? <DiffRows name={String(tool.input?.file_path ?? "")} rows={editRows(change)} /> : <pre className={codeClass}>{inputText(tool)}</pre>}
       {tool.done && (result || !tool.images?.length) ? (
         <pre className={cn(codeClass, tool.error && "text-danger")}>{(full || result.length <= LIMIT ? result : `${result.slice(0, LIMIT)}…`) || "（沒有輸出）"}</pre>
       ) : null}

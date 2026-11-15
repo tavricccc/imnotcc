@@ -1,5 +1,4 @@
-// One file's change in one turn, like an editor's diff: side by side when there is room, one
-// column on a phone. The turn's other files are a step away.
+// One file's change in one turn, as a one-column diff. The turn's other files are a step away.
 import * as React from "react";
 import { CaretLeft, CaretRight } from "@phosphor-icons/react/ssr";
 import { get } from "@/lib/api";
@@ -7,7 +6,6 @@ import { openPreview, type PreviewTarget } from "@/lib/preview";
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { ErrorState, LoadingList } from "@/ui/page";
-import { useCompactViewport } from "@/ui/use-compact-viewport";
 import { baseName } from "@/lib/format";
 import type { ThemedToken } from "shiki/core";
 import { Tokens, useTokens } from "./preview-views";
@@ -40,30 +38,7 @@ export function parsePatch(patch: string): Row[] {
 }
 
 type Line = Extract<Row, { kind: "line" }>;
-type Pair = { kind: "hunk"; text: string } | { kind: "pair"; left?: Line; right?: Line };
-
-/** Rows side by side: removed lines beside the added lines that replaced them. */
-function pairUp(rows: Row[]): Pair[] {
-  const out: Pair[] = [];
-  let removed: Line[] = [];
-  let added: Line[] = [];
-  const flush = () => {
-    for (let i = 0; i < Math.max(removed.length, added.length); i++) out.push({ kind: "pair", left: removed[i], right: added[i] });
-    removed = [];
-    added = [];
-  };
-  for (const row of rows) {
-    if (row.kind === "hunk") { flush(); out.push(row); continue; }
-    if (row.type === "-") { if (added.length) flush(); removed.push(row); }
-    else if (row.type === "+") added.push(row);
-    else { flush(); out.push({ kind: "pair", left: row, right: row }); }
-  }
-  flush();
-  return out;
-}
-
 export function DiffBody({ target }: { target: DiffTarget }) {
-  const compact = useCompactViewport();
   const [state, setState] = React.useState<{ key?: string; patch?: string; error?: string }>({});
   const key = `${target.session}\n${target.turn}\n${target.path}`;
   React.useEffect(() => {
@@ -93,18 +68,18 @@ export function DiffBody({ target }: { target: DiffTarget }) {
       {state.key !== key ? <LoadingList label="載入中" rows={3} />
         : state.error ? <ErrorState message={state.error} retryLabel="重試" title="看不到這個變更" />
         : !rows.length ? <p className="py-6 text-sm text-ink-muted">{state.patch === "" ? "二進位檔案，沒有逐行的變更可以顯示。" : "沒有內容上的變更。"}</p>
-        : <DiffRows compact={compact} name={target.path} rows={rows} />}
+        : <DiffRows name={target.path} rows={rows} />}
     </div>
   );
 }
 
-/** Rows drawn coloured by the file's language: one column on a phone, side by side when there is room. */
-export function DiffRows({ compact, name, rows }: { compact: boolean; name: string; rows: Row[] }) {
+/** Rows in one column, coloured by the file's language. */
+export function DiffRows({ name, rows }: { name: string; rows: Row[] }) {
   // Coloured as one text, in the patch's order: close enough line by line.
   const lines = React.useMemo(() => rows.filter((r): r is Line => r.kind === "line"), [rows]);
   const tokens = useTokens(React.useMemo(() => lines.map((l) => l.text).join("\n"), [lines]), baseName(name));
   const tok = React.useMemo(() => new Map(lines.map((l, i) => [l, tokens?.[i]] as const)), [lines, tokens]);
-  return compact ? <Unified rows={rows} tok={tok} /> : <SideBySide rows={rows} tok={tok} />;
+  return <Unified rows={rows} tok={tok} />;
 }
 
 /** A tool's edit as diff rows: what it took out, then what it put in. No line numbers; the tool does not give them. */
@@ -137,29 +112,6 @@ function Unified({ rows, tok }: { rows: Row[]; tok: Tok }) {
               <span className={cn(CELL, TONE[r.type])}><Text line={r} tok={tok} /></span>
             </div>
           ))}
-      </div>
-    </div>
-  );
-}
-
-function SideBySide({ rows, tok }: { rows: Row[]; tok: Tok }) {
-  const pairs = React.useMemo(() => pairUp(rows), [rows]);
-  const side = (line: Line | undefined, which: "left" | "right", key: string) => {
-    const type = line ? (line.type === " " ? " " : which === "left" ? "-" : "+") : null;
-    const tone = type ? TONE[type] : "bg-surface-solid/40";
-    return (
-      <React.Fragment key={key}>
-        <span className={cn(NUM, tone)}>{line ? (which === "left" ? line.old : line.new) : ""}</span>
-        <span className={cn("whitespace-pre-wrap break-all px-2", tone)}>{line ? <Text line={line} tok={tok} /> : " "}</span>
-      </React.Fragment>
-    );
-  };
-  return (
-    <div className="code-tokens overflow-x-auto rounded-tile bg-surface-raised py-2 font-mono text-[0.8125rem] leading-[1.6]" data-selectable="">
-      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)]">
-        {pairs.map((p, i) => p.kind === "hunk"
-          ? <div className="col-span-4 px-3 py-1 text-ink-faint" key={i}>{p.text}</div>
-          : [side(p.left, "left", `${i}l`), side(p.right, "right", `${i}r`)])}
       </div>
     </div>
   );

@@ -30,7 +30,7 @@ export function LoginPage() {
         <img alt="" className="size-20 rounded-[22.37%] shadow-float" src="/icon.svg" />
         <div className="grid gap-1 text-center">
           <h1 className="text-2xl font-bold tracking-tight">imnotcc</h1>
-          <p className="text-[0.9375rem] text-ink-muted">用手機操作這台電腦上的 Claude Code</p>
+          <p className="text-[0.9375rem] text-ink-muted">Claude Code 的圖形介面，電腦和手機都接得上</p>
         </div>
         <Panel className="grid w-full gap-4">
           <Field error={error} label="密碼">
