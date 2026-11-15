@@ -229,10 +229,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
         modelTrigger,
         <div className="grid gap-5 pb-2">
           {chosen.efforts ? (
-            <div className="grid gap-1">
               <EffortSlider effort={effort} levels={chosen.efforts} onEffort={onEffort} />
-              <p className="px-1 text-xs text-ink-muted">改了從下一則訊息開始生效。</p>
-            </div>
           ) : <p className="px-1 text-sm text-ink-muted">這個模型不支援調整 Effort。</p>}
           <ListGroup label="模型" role="radiogroup">{main.map(row)}</ListGroup>
           {more.length ? (
