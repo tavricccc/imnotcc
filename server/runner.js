@@ -94,6 +94,8 @@ class Runner {
     this.cost = null;
     this.draft = ''; // the reply still streaming, for a socket that joins mid-turn
     this.unsent = ''; // streamed text not yet sent to the pages
+    // Background work Claude Code reports as live (shells, agents, monitors), as it last listed it.
+    this.tasks = [];
     this.deltaTimer = null;
     this.turn = null; // { uuid, before: snapshot | null } while a turn that started with that prompt runs
     // Prompts sent as "queue" while a turn ran: each goes out as its own turn once the one before
@@ -148,7 +150,7 @@ class Runner {
     this.flushDelta();
     const s = store.get().settings;
     return {
-      kind: 'snapshot', status: this.status, open: !!this.q, draft: this.draft, context: this.context, cost: this.cost, queued: this.heldView(),
+      kind: 'snapshot', status: this.status, open: !!this.q, draft: this.draft, tasks: this.tasks, context: this.context, cost: this.cost, queued: this.heldView(),
       pending: [...this.pending.values()].map((p) => p.event), permissionMode: this.mode(),
       model: (this.meta?.model ?? s.model) || null, effort: (this.meta?.effort ?? s.effort) || null,
     };
@@ -189,6 +191,7 @@ class Runner {
       },
     });
     this.q = q;
+    this.setTasks([]); // the list is per process, and a new one starts with none
     this.done = this.consume(q);
   }
 
@@ -198,7 +201,7 @@ class Runner {
     } catch (e) {
       emit(this.id, { kind: 'error', message: String(e?.message ?? e) });
     } finally {
-      if (this.q === q) this.q = null;
+      if (this.q === q) { this.q = null; this.setTasks([]); }
       this.denyAllPending('The session was closed.');
       this.turn = null;
       this.draft = '';
@@ -216,6 +219,13 @@ class Runner {
         this.unsent += ev.delta.text;
         this.deltaTimer ??= setTimeout(() => this.flushDelta(), DELTA_MS);
       }
+      return;
+    }
+    if (m.type === 'system' && m.subtype === 'background_tasks_changed') {
+      // Replaces the list; tasks Claude Code marks ambient are watchers, not work to show.
+      this.setTasks((m.tasks ?? []).filter((t) => !t.ambient).map((t) => ({
+        id: t.task_id, type: t.task_type, agent: t.subagent_type ?? null, description: t.description,
+      })));
       return;
     }
     if (m.type === 'system' && m.subtype === 'init') {
@@ -257,6 +267,23 @@ class Runner {
       emit(this.id, { kind: 'changes', uuid: turn.uuid, files });
     })().catch((e) => console.error('[imnotcc] changes:', e.message));
   }
+
+  setTasks(tasks) {
+    if (!tasks.length && !this.tasks.length) return;
+    this.tasks = tasks;
+    emit(this.id, { kind: 'tasks', tasks });
+    // The idle close waited for these to end.
+    if (!tasks.length && this.status === 'idle' && this.q) this.armIdle();
+  }
+
+  /** The end of a background shell's output (the last 8 KiB). */
+  async taskOutput(taskId) {
+    if (!this.q || typeof this.q.getTaskOutput !== 'function') return null;
+    const r = await this.q.getTaskOutput(taskId);
+    return { output: r?.output ?? '', truncated: !!r?.truncated, bytes: r?.total_bytes ?? 0 };
+  }
+
+  async stopTask(taskId) { if (this.q) await this.q.stopTask(taskId); }
 
   setStatus(status) {
     if (this.status === status) return;
@@ -396,7 +423,8 @@ class Runner {
     clearTimeout(this.idleTimer);
     const minutes = store.get().settings.idleMinutes;
     if (!minutes) return;
-    this.idleTimer = setTimeout(() => { if (this.status === 'idle' && !this.pending.size) this.close(); }, minutes * 60_000);
+    // Closing the process would kill its background work, so a session with some stays open.
+    this.idleTimer = setTimeout(() => { if (this.status === 'idle' && !this.pending.size && !this.tasks.length) this.close(); }, minutes * 60_000);
   }
 
   close() {

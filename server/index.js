@@ -441,6 +441,11 @@ wss.on('connection', (ws) => {
         case 'model': await r.setModel(m.model); break;
         case 'effort': await r.setEffort(m.effort); break;
         case 'restart': r.close(); break;
+        case 'task-output':
+          if (typeof m.task !== 'string') break;
+          send({ session: id, kind: 'task-output', task: m.task, ...(await r.taskOutput(m.task) ?? { output: '', truncated: false, bytes: 0, gone: true }) });
+          break;
+        case 'task-stop': if (typeof m.task === 'string') await r.stopTask(m.task); break;
         case 'answer': r.answer(m.id, m); break;
         default: break;
       }
