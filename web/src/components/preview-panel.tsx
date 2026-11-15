@@ -1,9 +1,9 @@
-// The preview panel: one file, or one file's change in a turn. On a wide screen it floats inside
+// The preview panel: one file, one file's change in a turn, or background work. On a wide screen it floats inside
 // the right edge of the main card and shifts the chat column over; narrower, it is a sheet.
 import * as React from "react";
-import { Code, Eye, X } from "@phosphor-icons/react/ssr";
+import { Code, Eye, Terminal, X } from "@phosphor-icons/react/ssr";
 import { useStore } from "@/lib/store-core";
-import { closePreview, preview, type PreviewTarget } from "@/lib/preview";
+import { backgroundTasks, closePreview, preview, type PreviewTarget } from "@/lib/preview";
 import { prefs } from "@/lib/prefs";
 import { baseName } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ import { Sheet } from "@/ui/sheet";
 import { FileIcon } from "./file-icon";
 import { FileBody, OpenPage, OpenRaw, useFile } from "./preview-views";
 import { DiffBody } from "./diff-view";
+import { TaskList } from "./background-tasks";
 
 /** Wide enough for the panel beside the chat rather than over it. */
 const WIDE_QUERY = "(min-width: 80rem)";
@@ -35,7 +36,8 @@ export function PreviewPanel() {
   if (target) last.current = target;
   const shown = target ?? last.current;
   const [source, setSource] = React.useState(false);
-  React.useEffect(() => setSource(false), [shown?.path]);
+  const shownPath = shown && "path" in shown ? shown.path : undefined;
+  React.useEffect(() => setSource(false), [shownPath]);
   // Read once here for both the title and the body; a diff reads its own.
   const file = useFile(shown?.session, shown?.kind === "file" ? shown.path : undefined, version);
   const toggleSource = () => setSource(!source);
@@ -116,6 +118,7 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
 
 /** The file's name and where it is, with what can be done to it. */
 function Title({ file, source, target, toggleSource }: { file: FileState; source: boolean; target: PreviewTarget; toggleSource: () => void }) {
+  if (target.kind === "tasks") return <TasksTitle session={target.session} />;
   const kind = file.data?.kind ?? "text";
   const name = file.data?.name ?? baseName(target.path);
   return (
@@ -136,7 +139,21 @@ function Title({ file, source, target, toggleSource }: { file: FileState; source
   );
 }
 
+function TasksTitle({ session }: { session: string }) {
+  const count = (useStore(backgroundTasks)[session] ?? []).length;
+  return (
+    <div className="flex min-w-0 items-start gap-2">
+      <Terminal className="mt-0.5 size-5 shrink-0 text-ink-muted" />
+      <div className="grid min-w-0 flex-1">
+        <span className="truncate text-[0.9375rem] font-semibold">背景工作</span>
+        <span className="truncate text-[0.8125rem] font-normal text-ink-muted">{count ? `${count} 個正在執行` : "都已結束"}</span>
+      </div>
+    </div>
+  );
+}
+
 function Body({ file, source, target }: { file: FileState; source: boolean; target: PreviewTarget }) {
   if (target.kind === "diff") return <DiffBody target={target} />;
+  if (target.kind === "tasks") return <TaskList session={target.session} />;
   return <FileBody file={file} line={target.line} session={target.session} source={source} />;
 }

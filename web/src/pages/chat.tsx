@@ -22,7 +22,7 @@ import { Markdown } from "@/components/markdown";
 import { openImage } from "@/components/lightbox";
 import { SessionContext } from "@/lib/session-images";
 import { forgetFiles } from "@/lib/file-mentions";
-import { closePreview, openPreview, preview, refreshPreview } from "@/lib/preview";
+import { backgroundTasks, closePreview, openPreview, preview, refreshPreview } from "@/lib/preview";
 import { PreviewPanel, useWidePreview } from "@/components/preview-panel";
 import { PermissionCard, type Answer, type PermissionRequest } from "@/components/permission-card";
 import { ToolCard } from "@/components/tool-card";
@@ -515,6 +515,9 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     } catch { toast.error("無法複製"); }
   }
 
+  // Shared with the preview panel, which lists them.
+  React.useEffect(() => { backgroundTasks.set({ [id]: s.tasks }); }, [id, s.tasks]);
+  React.useEffect(() => () => backgroundTasks.set({ [id]: [] }), [id]);
   const tasksChip = <BackgroundTasks session={id} tasks={s.tasks} />;
   const shownItems = (hideWork ? t.items.filter((it) => it.type !== "tool" && it.type !== "thinking") : t.items)
     .filter((it, i, all) => !(isInterrupt(it) && isInterrupt(all.slice(0, i).findLast((p) => !isStep(p)))));

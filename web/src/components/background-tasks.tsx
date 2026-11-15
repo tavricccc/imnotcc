@@ -2,57 +2,50 @@ import * as React from "react";
 import { CaretRight, Robot, Stop, Terminal } from "@phosphor-icons/react/ssr";
 import { send, subscribe } from "@/lib/socket";
 import { cn } from "@/lib/utils";
-import { AutoHeight, Popover } from "@/ui/popover";
+import { useStore } from "@/lib/store-core";
+import { backgroundTasks, openPreview } from "@/lib/preview";
 import { duration, useNow } from "./turn";
 
-/** One piece of background work, as the server lists it (shells, agents, monitors). */
-export interface BackgroundTask {
-  id: string; type: string; agent: string | null; description: string;
-  command?: string | null; // the shell command, or an agent's prompt
-  startedAt?: number;
-}
+export type { BackgroundTask } from "@/lib/preview";
+import type { BackgroundTask } from "@/lib/preview";
 
 const isShell = (t: BackgroundTask) => t.type === "local_bash" || t.type === "monitor" || /bash|shell|monitor/i.test(t.type);
 
 /**
- * A quiet "N 個背景工作" label with a breathing dot; it opens the list. Each row reads as
- * icon, name and how long it has run; opened, it shows the command and, for a shell, its output.
+ * A quiet "N 個背景工作" label with a breathing dot. It opens the list in the preview panel
+ * (beside the chat on a wide screen, a sheet otherwise).
  */
 export function BackgroundTasks({ className, session, tasks }: { className?: string; session: string; tasks: BackgroundTask[] }) {
-  const [open, setOpen] = React.useState(false);
+  if (!tasks.length) return null;
+  return (
+    <button
+      className={cn("flex h-7 items-center gap-2 rounded-md px-2 text-[0.8125rem] text-ink-muted outline-none transition-colors duration-[var(--motion-control)] hover:bg-surface-raised hover:text-ink focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]", className)}
+      onClick={() => openPreview({ kind: "tasks", session })}
+      type="button"
+    >
+      <span aria-hidden className="relative grid size-2 place-items-center">
+        <span className="absolute size-2 rounded-full bg-accent-ink opacity-50 motion-safe:animate-ping" />
+        <span className="size-1.5 rounded-full bg-accent-ink" />
+      </span>
+      {tasks.length} 個背景工作
+    </button>
+  );
+}
+
+/** The panel's body: each row reads as icon, name and how long it has run; opened, it shows
+ * the command and, for a shell, its output. */
+export function TaskList({ session }: { session: string }) {
+  const tasks = useStore(backgroundTasks)[session] ?? [];
   const [shown, setShown] = React.useState<string | null>(null);
   // A task that ended is no longer listed, so its output closes with it.
   React.useEffect(() => { if (shown && !tasks.some((t) => t.id === shown)) setShown(null); }, [tasks, shown]);
-  React.useEffect(() => { if (!tasks.length) setOpen(false); }, [tasks.length]);
-  if (!tasks.length) return null;
+  if (!tasks.length) return <p className="py-8 text-center text-[0.875rem] text-ink-muted">沒有正在執行的背景工作</p>;
   return (
-    <Popover
-      align="start"
-      className="w-[min(30rem,calc(100vw-2rem))] p-1.5"
-      onOpenChange={setOpen}
-      open={open}
-      side="top"
-      trigger={(
-        <button
-          className={cn("flex h-7 items-center gap-2 rounded-md px-2 text-[0.8125rem] text-ink-muted outline-none transition-colors duration-[var(--motion-control)] hover:bg-surface-raised hover:text-ink focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]", className)}
-          type="button"
-        >
-          <span aria-hidden className="relative grid size-2 place-items-center">
-            <span className="absolute size-2 rounded-full bg-accent-ink opacity-50 motion-safe:animate-ping" />
-            <span className="size-1.5 rounded-full bg-accent-ink" />
-          </span>
-          {tasks.length} 個背景工作
-        </button>
-      )}
-    >
-      <AutoHeight>
-        <ul className="grid gap-0.5">
-          {tasks.map((t) => (
-            <TaskRow key={t.id} onToggle={() => setShown((s) => (s === t.id ? null : t.id))} open={shown === t.id} session={session} task={t} />
-          ))}
-        </ul>
-      </AutoHeight>
-    </Popover>
+    <ul className="-mx-2 grid gap-0.5">
+      {tasks.map((t) => (
+        <TaskRow key={t.id} onToggle={() => setShown((s) => (s === t.id ? null : t.id))} open={shown === t.id} session={session} task={t} />
+      ))}
+    </ul>
   );
 }
 
@@ -122,7 +115,7 @@ function TaskOutput({ session, task }: { session: string; task: string }) {
   }, [out]);
   return (
     <pre
-      className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-surface-raised px-2.5 py-2 font-mono text-[0.75rem] leading-relaxed text-ink-muted"
+      className="max-h-[50svh] overflow-auto whitespace-pre-wrap break-all rounded-md bg-surface-raised px-2.5 py-2 font-mono text-[0.75rem] leading-relaxed text-ink-muted"
       onScroll={(e) => { const el = e.currentTarget; stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 16; }}
       ref={box}
     >
