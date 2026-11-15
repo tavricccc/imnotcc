@@ -48,7 +48,7 @@ export function FileBody({ file: { data, error }, line, session, source }: { fil
   return <CodeView line={line} name={data.name} text={data.text} />;
 }
 
-async function revealInExplorer(targetPath: string) {
+export async function revealInExplorer(targetPath: string) {
   try {
     await tauriInvoke("reveal_file", { path: targetPath });
   } catch (e) {

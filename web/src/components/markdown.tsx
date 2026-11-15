@@ -6,7 +6,12 @@ import { imageUrl, mentionedImages, SessionContext } from "@/lib/session-images"
 import { cn } from "@/lib/utils";
 import { chipLabel, markFiles, parseRef, resolveFile, type FileInfo } from "@/lib/file-mentions";
 import { openPreview } from "@/lib/preview";
+import { get } from "@/lib/api";
+import { useIsLocalHost } from "@/lib/tauri";
+import { useContextItems } from "@/ui/context-menu";
+import { Copy, Eye, FolderOpen } from "@phosphor-icons/react/ssr";
 import { FileIcon } from "./file-icon";
+import { fileUrl, revealInExplorer, type FileData } from "./preview-views";
 import { openImage, Thumb } from "./lightbox";
 
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
@@ -68,6 +73,20 @@ export function Markdown({ className, text }: { className?: string; text: string
   }, []);
   useCopyButtons(body, html);
   const chips = useFileChips(body, session, html);
+  const local = useIsLocalHost();
+  // Right-clicking a file chip: preview it, copy its path, or show it in File Explorer (desktop app on this computer).
+  useContextItems(body, (target) => {
+    const chip = target.closest<HTMLElement>("[data-file-kind]");
+    const info = chip && found.get(chip);
+    if (!session || !chip || !info) return null;
+    return [
+      { key: "preview", label: "預覽", icon: Eye, onSelect: () => openPreview({ kind: "file", session, path: info.path, line: parseRef(chip.dataset.file ?? "").line }) },
+      { key: "copy-path", label: "複製路徑", icon: Copy, onSelect: () => { void navigator.clipboard.writeText(info.path).catch(() => {}); } },
+      ...(local ? [{ key: "reveal", label: "在檔案總管顯示", icon: FolderOpen, onSelect: () => {
+        void get<FileData>(fileUrl(session, "file", info.path)).then((d) => revealInExplorer(d.hostPath || d.path), () => revealInExplorer(info.path));
+      } }] : []),
+    ];
+  });
   return (
     <div className={cn("grid min-w-0 gap-2", className)}>
       <div
