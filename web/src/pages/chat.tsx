@@ -1,8 +1,8 @@
 import * as React from "react";
 import { toast } from "sonner";
 import {
-  ArrowClockwise, ArrowsInLineVertical, CaretLeft, Check, Copy, DotsThree, GitBranch, PencilSimple,
-  Sparkle, Terminal, Trash,
+  ArrowClockwise, ArrowsInLineVertical, CaretDown, CaretLeft, Check, Copy, DotsThree, GitBranch, PencilSimple,
+  FolderSimple, Sparkle, Terminal, Trash,
   X,
 } from "@phosphor-icons/react/ssr";
 import { del, get, post } from "@/lib/api";
@@ -522,17 +522,23 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         className="relative flex min-h-0 flex-1 flex-col motion-safe:transition-[margin-right] motion-safe:duration-[var(--preview-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]"
         style={sidePreview ? { marginRight: "var(--preview-width, 0px)" } : undefined}
       >
-      <header className="pointer-events-none relative z-30 shrink-0 px-[var(--gutter)] pt-[calc(var(--safe-top)+0.5rem)] md:px-8 md:pt-4 [&>div]:pointer-events-auto" ref={header}>
-        <div className="glass-float mx-auto flex max-w-3xl items-center gap-2 rounded-full p-1.5">
-          <Button aria-label="返回" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
-          <button className="min-w-0 flex-1 rounded-full px-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]" onClick={() => setSheet("options")} type="button">
-            <h1 className="truncate text-[0.9375rem] font-semibold">{title}</h1>
-            <p className="truncate text-[0.8125rem] text-ink-muted">
+      {/* Phones: a floating glass pill. Desktop: a flat bar across the pane, the title at the
+          left as a menu button (folder, title, caret) and the controls at the right. */}
+      <header className="pointer-events-none relative z-30 shrink-0 px-[var(--gutter)] pt-[calc(var(--safe-top)+0.5rem)] md:px-3 md:pt-2 [&>div]:pointer-events-auto" ref={header}>
+        <div className="glass-float mx-auto flex max-w-3xl items-center gap-2 rounded-full p-1.5 md:max-w-none md:gap-1 md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-none">
+          <Button aria-label="返回" className="md:hidden" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
+          <button className="min-w-0 flex-1 rounded-full px-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] md:flex md:flex-none md:items-center md:gap-1.5 md:rounded-lg md:px-2 md:py-1.5 md:hover:bg-surface-raised" onClick={() => setSheet("options")} title={meta?.cwd} type="button">
+            <FolderSimple className="hidden size-4 shrink-0 text-ink-muted md:block" />
+            <h1 className="truncate text-[0.9375rem] font-semibold md:text-[0.875rem] md:font-medium">{title}</h1>
+            <p className="truncate text-[0.8125rem] text-ink-muted md:hidden">
               {meta ? baseName(meta.cwd) : ""}
               {!online ? <span className="text-caution"> · 離線</span> : null}
             </p>
+            {!online ? <span className="hidden shrink-0 text-[0.8125rem] text-caution md:inline">離線</span> : null}
+            <CaretDown className="hidden size-3 shrink-0 text-ink-muted md:block" weight="bold" />
           </button>
-          <UsageRing className="size-10 border-0 bg-transparent" label={`Context ${contextPct == null ? "尚無資料" : `${Math.round(contextPct)}%`}`} onClick={() => { send(id, { t: "usage" }); setSheet("usage"); }} pct={contextPct} />
+          <span className="hidden flex-1 md:block" />
+          <UsageRing className="size-10 border-0 bg-transparent md:size-8" label={`Context ${contextPct == null ? "尚無資料" : `${Math.round(contextPct)}%`}`} onClick={() => { send(id, { t: "usage" }); setSheet("usage"); }} pct={contextPct} />
           <Button aria-label="對話選項" onClick={() => setSheet("options")} size="icon" variant="ghost"><DotsThree weight="bold" /></Button>
         </div>
       </header>
