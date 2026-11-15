@@ -103,7 +103,7 @@ export function ErrorState({ message, onRetry, retryLabel, title }: {
   return (
     <StateMessage
       action={onRetry ? <Button onClick={onRetry}><ArrowClockwise weight="bold" />{retryLabel}</Button> : null}
-      description={message}
+      description={<span data-selectable="">{message}</span>}
       icon={<WarningCircle />}
       title={title}
       tone="danger"

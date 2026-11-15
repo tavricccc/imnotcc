@@ -149,8 +149,8 @@ function basicItems(target: Element): ContextItem[] {
     const quote = quoteTarget;
     if (quote) items.push({ key: "quote", label: "引用到輸入框", icon: Quotes, onSelect: () => quote(selected) });
   }
-  // The text of the area it is in (a reply, a file), not the whole app with its buttons.
-  const area = target.closest("[data-selectable], pre, main");
+  // The text of the area it is in (a reply, a file); the app's chrome is not selectable.
+  const area = target.closest("[data-selectable], pre");
   if (area) items.push({ key: "all", label: "全選", icon: SelectionAll, onSelect: () => document.getSelection()?.selectAllChildren(area) });
   return items;
 }

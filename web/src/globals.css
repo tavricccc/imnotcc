@@ -21,6 +21,16 @@
 *::-webkit-scrollbar { display: none; width: 0; height: 0; }
 a, img { -webkit-user-drag: none; }
 
+/* Like an app, not a page: chrome (buttons, lists, headers, labels) is not selectable; what was
+   written is — replies, prompts, tool output, previews and diffs carry data-selectable — and so
+   is anything typed into, code, and error text that may need copying. */
+body { -webkit-user-select: none; user-select: none; }
+[data-selectable], [data-selectable] *, input, textarea, [contenteditable]:not([contenteditable="false"]),
+pre, code, [role="alert"], [data-sonner-toast] [data-description] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 html {
   touch-action: pan-x pan-y;
   overflow-x: clip;
