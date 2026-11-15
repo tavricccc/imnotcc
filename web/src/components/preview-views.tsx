@@ -6,7 +6,7 @@ import { marked } from "marked";
 import { toast } from "sonner";
 import { ArrowSquareOut, DownloadSimple, FolderOpen, Globe } from "@phosphor-icons/react/ssr";
 import { get, post } from "@/lib/api";
-import { formatBytes } from "@/lib/format";
+import { baseName, formatBytes } from "@/lib/format";
 import { looksLikePath, parseRef, type FileKind } from "@/lib/file-mentions";
 import { openPreview } from "@/lib/preview";
 import { tauriInvoke, useIsLocalHost } from "@/lib/tauri";
@@ -247,20 +247,34 @@ export function OpenRaw({ hostPath, kind, name, path, session, size }: { hostPat
     );
   }
 
-  if (inline) {
-    return (
-      <Button asChild aria-label="在新分頁開啟" size="icon-sm" title="在新分頁開啟" variant="ghost">
-        <a href={raw} rel="noopener noreferrer" target="_blank"><ArrowSquareOut /></a>
-      </Button>
-    );
-  }
-
-  const label = dl.active ? (dl.pct !== null ? `下載中 ${dl.pct}%` : "下載中…") : "下載";
   return (
-    <Button aria-label={label} onClick={() => void dl.start()} size="icon-sm" status={dl.active ? "loading" : "idle"} title={label} variant="ghost">
+    <>
+      {inline ? (
+        <Button asChild aria-label="在新分頁開啟" size="icon-sm" title="在新分頁開啟" variant="ghost">
+          <a href={raw} rel="noopener noreferrer" target="_blank"><ArrowSquareOut /></a>
+        </Button>
+      ) : null}
+      <DownloadButton dl={dl} label="下載" />
+    </>
+  );
+}
+
+function DownloadButton({ dl, label }: { dl: ReturnType<typeof useFileDownload>; label: string }) {
+  const shown = dl.active ? (dl.pct !== null ? `下載中 ${dl.pct}%` : "下載中…") : label;
+  return (
+    <Button aria-label={shown} onClick={() => void dl.start()} size="icon-sm" status={dl.active ? "loading" : "idle"} title={shown} variant="ghost">
       {dl.active ? null : <DownloadSimple />}
     </Button>
   );
+}
+
+/** Downloads a folder as a zip (.git, node_modules and keys left out). Not shown on Host, where the folder is at hand. */
+export function FolderDownload({ path, session }: { path: string; session: string }) {
+  const isHost = useIsLocalHost();
+  const name = `${baseName(path) || "folder"}.zip`;
+  const dl = useFileDownload({ name, url: `/api/sessions/${encodeURIComponent(session)}/zip?path=${encodeURIComponent(path)}` });
+  if (isHost) return null;
+  return <DownloadButton dl={dl} label="下載成 zip" />;
 }
 
 /** Coloured lines for a file's text, once the highlighter has them; null meanwhile or for unknown languages. */

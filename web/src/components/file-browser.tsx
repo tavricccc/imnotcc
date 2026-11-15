@@ -11,6 +11,7 @@ import { Input } from "@/ui/field";
 import { Segmented } from "@/ui/segmented";
 import { ErrorState, LoadingList } from "@/ui/page";
 import { FileIcon } from "./file-icon";
+import { FolderDownload } from "./preview-views";
 
 interface Entry { name: string; path: string; kind: "dir" | "file"; size: number | null; mtime: number | null; link?: boolean }
 interface Tree { path: string; parent: string | null; root: string; entries: Entry[]; truncated: boolean }
@@ -32,7 +33,7 @@ function useGet<T>(url: string | null) {
   return state.url === url ? state : {};
 }
 
-export function FilesTitle({ path }: { path?: string }) {
+export function FilesTitle({ path, session }: { path?: string; session: string }) {
   return (
     <div className="flex min-w-0 items-start gap-2">
       <FolderOpen className="mt-0.5 size-5 shrink-0 text-ink-muted" />
@@ -40,6 +41,7 @@ export function FilesTitle({ path }: { path?: string }) {
         <span className="truncate text-[0.9375rem] font-semibold">{path ? baseName(path) : "檔案"}</span>
         <span className="truncate text-[0.8125rem] font-normal text-ink-muted" data-selectable="" title={path}>{path ?? "工作資料夾"}</span>
       </div>
+      {path ? <FolderDownload path={path} session={session} /> : null}
     </div>
   );
 }

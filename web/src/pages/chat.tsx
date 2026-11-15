@@ -16,6 +16,7 @@ import { addMessage, addNote, createTranscript, type Item, type Transcript } fro
 import { cn } from "@/lib/utils";
 import { mergeTranscript, readLocalTranscript, removeLocalTranscript, restoreTranscript, saveLocalTranscript } from "@/lib/local-transcript";
 import type { FirstPrompt, PickedImage } from "@/lib/prompt";
+import { attachmentLine, uploadFile } from "@/lib/upload";
 import { Composer } from "@/components/composer";
 import { ComposerSettings } from "@/components/composer-settings";
 import { Markdown } from "@/components/markdown";
@@ -129,6 +130,21 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const [sheet, setSheet] = React.useState<SheetName>(null);
   const [menuIndex, setMenuIndex] = React.useState(0);
   const [images, setImages] = React.useState<PickedImage[]>([]);
+  const [uploading, setUploading] = React.useState(0);
+  // Each file goes up on its own; once there, a line naming its path joins the message.
+  const attachFiles = (files: File[]) => {
+    for (const file of files) {
+      const toastId = toast.loading(`上傳 ${file.name}…`);
+      setUploading((n) => n + 1);
+      uploadFile(id, file, (pct) => toast.loading(`上傳 ${file.name}… ${pct}%`, { id: toastId }))
+        .then(({ relative }) => {
+          setText((cur) => `${cur.trimEnd() ? `${cur.trimEnd()}\n` : ""}${attachmentLine(relative)}\n`);
+          toast.success(`${file.name} 已上傳`, { id: toastId });
+        })
+        .catch((e) => toast.error((e as Error).message, { id: toastId }))
+        .finally(() => setUploading((n) => n - 1));
+    }
+  };
   const input = React.useRef<HTMLTextAreaElement>(null);
   const follow = React.useRef(!!initialHistory);
   // Whether new output should keep the view at the bottom: on while the reader sits at the
@@ -571,7 +587,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
             <CaretDown className="hidden size-3 shrink-0 text-ink-muted md:block" weight="bold" />
           </button>
           <span className="hidden flex-1 md:block" />
-          <Button aria-label="檔案" onClick={() => openPreview({ kind: "files", session: id })} size="icon" title="檔案" variant="ghost"><FolderOpen /></Button>
+          <Button aria-label="檔案" onClick={() => openPreview({ kind: "files", session: id, path: meta?.cwd })} size="icon" title="檔案" variant="ghost"><FolderOpen /></Button>
           <UsageRing className="size-10 border-0 bg-transparent md:size-8" label={`Context ${contextPct == null ? "尚無資料" : `${Math.round(contextPct)}%`}`} onClick={() => { send(id, { t: "usage" }); setSheet("usage"); }} pct={contextPct} />
           <Button aria-label="對話選項" onClick={() => setSheet("options")} size="icon" variant="ghost"><DotsThree weight="bold" /></Button>
         </div>
@@ -633,7 +649,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
               ))}
             </ul>
           ) : null}
-          <Composer images={images} input={input} onChange={setText} onImages={setImages} onInterrupt={running ? interrupt : undefined} onKeyDown={onKey} onLongPressSend={running ? () => setAltAsk(true) : undefined} placeholder={running ? `輸入訊息（送出會${BUSY_SEND_LABEL[busySend]}）` : "輸入訊息，或 / 叫出指令"} text={text}>
+          <Composer attaching={uploading > 0} images={images} input={input} onChange={setText} onFiles={attachFiles} onImages={setImages} onInterrupt={running ? interrupt : undefined} onKeyDown={onKey} onLongPressSend={running ? () => setAltAsk(true) : undefined} placeholder={running ? `輸入訊息（送出會${BUSY_SEND_LABEL[busySend]}）` : "輸入訊息，或 / 叫出指令"} text={text}>
             <ComposerSettings disabled={!online} effort={s.effort ?? ""} mode={s.mode} model={s.model ?? ""}
               onEffort={(effort) => { if (effort !== (s.effort ?? "")) send(id, { t: "effort", effort }); }} onMode={(mode) => send(id, { t: "mode", mode })} onModel={(model) => send(id, { t: "model", model })} />
           </Composer>

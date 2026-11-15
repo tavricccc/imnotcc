@@ -76,6 +76,7 @@ try {
   const r1 = await up('../../evil name?.log', 'hello log');
   const u1 = await r1.json();
   check('upload lands in .imnotcc/uploads', r1.status === 200 && u1.path.startsWith(path.join(work, '.imnotcc', 'uploads')) && fs.readFileSync(u1.path, 'utf8') === 'hello log', JSON.stringify(u1));
+  check('upload has a relative path', u1.relative === `.imnotcc/uploads/${path.basename(u1.path)}`, u1.relative);
   check('upload name is cleaned', /^\d{8}-\d{6}-evil name_\.log$/.test(path.basename(u1.path)), path.basename(u1.path));
   check('upload folder ignored by git', fs.readFileSync(path.join(work, '.imnotcc', '.gitignore'), 'utf8').includes('*'));
   check('upload of a key is refused', (await up('id_rsa', 'x')).status === 400);

@@ -120,7 +120,7 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
 /** The file's name and where it is, with what can be done to it. */
 function Title({ file, source, target, toggleSource }: { file: FileState; source: boolean; target: PreviewTarget; toggleSource: () => void }) {
   if (target.kind === "tasks") return <TasksTitle session={target.session} />;
-  if (target.kind === "files") return <FilesTitle path={target.path} />;
+  if (target.kind === "files") return <FilesTitle path={target.path} session={target.session} />;
   const kind = file.data?.kind ?? "text";
   const name = file.data?.name ?? baseName(target.path);
   return (
@@ -158,8 +158,6 @@ function TasksTitle({ session }: { session: string }) {
 function Body({ file, source, target }: { file: FileState; source: boolean; target: PreviewTarget }) {
   if (target.kind === "diff") return <DiffBody target={target} />;
   if (target.kind === "tasks") return <TaskList session={target.session} />;
-  if (target.kind === "files") return <FilesBody key={`${target.path}
-${target.query}
-${target.mode}`} mode={target.mode} path={target.path} query={target.query} session={target.session} />;
+  if (target.kind === "files") return <FilesBody key={`${target.path}\n${target.query}\n${target.mode}`} mode={target.mode} path={target.path} query={target.query} session={target.session} />;
   return <FileBody file={file} line={target.line} session={target.session} source={source} />;
 }

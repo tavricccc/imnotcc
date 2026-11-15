@@ -71,7 +71,8 @@ export function transferRoutes(app, { requireSession, wrap }) {
       if (!res.headersSent && !req.destroyed) return res.status(500).json({ error: `儲存失敗：${e.code ?? e.message}` });
       return;
     }
-    res.json({ path: sessionPath(meta.cwd).join(dir.shown, file), name, size: received });
+    // `relative` is from the session's folder, where Claude runs: the short form for the message.
+    res.json({ path: sessionPath(meta.cwd).join(dir.shown, file), relative: `.imnotcc/uploads/${file}`, name, size: received });
   }));
 
   // A folder as a zip, streamed. .git, node_modules and keys are left out; links are not followed.

@@ -22,22 +22,28 @@ export function PromptImages({ disabled, images, onRemove }: {
   );
 }
 
-export function ImagePicker({ disabled, onPick, onReading }: {
-  disabled?: boolean; onPick: (images: PickedImage[]) => void; onReading?: (reading: boolean) => void;
+/** The "+" button: images join the message; with `onFiles`, any other file is handed over too. */
+export function ImagePicker({ disabled, onFiles, onPick, onReading }: {
+  disabled?: boolean; onFiles?: (files: File[]) => void; onPick: (images: PickedImage[]) => void; onReading?: (reading: boolean) => void;
 }) {
   const picker = React.useRef<HTMLInputElement>(null);
+  const label = onFiles ? "加入圖片或檔案" : "加入圖片";
   return (
     <>
-      <input accept="image/*" className="hidden" multiple onChange={async (event) => {
-        const files = [...(event.target.files ?? [])].slice(0, 8);
+      <input accept={onFiles ? undefined : "image/*"} className="hidden" multiple onChange={async (event) => {
+        const all = [...(event.target.files ?? [])];
         event.target.value = "";
+        const others = onFiles ? all.filter((f) => !f.type.startsWith("image/")) : [];
+        if (others.length) onFiles?.(others);
+        const files = all.filter((f) => !others.includes(f)).slice(0, 8);
+        if (!files.length) return;
         onReading?.(true);
         try {
           const picked = await Promise.all(files.map(readImage));
           onPick(picked.filter((image): image is PickedImage => image !== null));
         } finally { onReading?.(false); }
       }} ref={picker} type="file" />
-      <Button aria-label="加入圖片" className="size-9" disabled={disabled} onClick={() => picker.current?.click()} size="icon" variant="ghost"><Plus weight="bold" /></Button>
+      <Button aria-label={label} className="size-9" disabled={disabled} onClick={() => picker.current?.click()} size="icon" title={label} variant="ghost"><Plus weight="bold" /></Button>
     </>
   );
 }
