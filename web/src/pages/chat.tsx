@@ -2,7 +2,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import {
   ArrowClockwise, ArrowsInLineVertical, CaretDown, CaretLeft, Check, Copy, DotsThree, GitBranch, PencilSimple,
-  FolderSimple, Sparkle, Terminal, Trash,
+  FolderOpen, FolderSimple, Sparkle, Terminal, Trash,
   X,
 } from "@phosphor-icons/react/ssr";
 import { del, get, post } from "@/lib/api";
@@ -571,6 +571,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
             <CaretDown className="hidden size-3 shrink-0 text-ink-muted md:block" weight="bold" />
           </button>
           <span className="hidden flex-1 md:block" />
+          <Button aria-label="檔案" onClick={() => openPreview({ kind: "files", session: id })} size="icon" title="檔案" variant="ghost"><FolderOpen /></Button>
           <UsageRing className="size-10 border-0 bg-transparent md:size-8" label={`Context ${contextPct == null ? "尚無資料" : `${Math.round(contextPct)}%`}`} onClick={() => { send(id, { t: "usage" }); setSheet("usage"); }} pct={contextPct} />
           <Button aria-label="對話選項" onClick={() => setSheet("options")} size="icon" variant="ghost"><DotsThree weight="bold" /></Button>
         </div>

@@ -1,4 +1,4 @@
-// The preview panel: one file, one file's change in a turn, or background work. On a wide screen it floats inside
+// The preview panel: one file, one file's change in a turn, background work, or the file browser. On a wide screen it floats inside
 // the right edge of the main card and shifts the chat column over; narrower, it is a sheet.
 import * as React from "react";
 import { Code, Eye, Terminal, X } from "@phosphor-icons/react/ssr";
@@ -13,6 +13,7 @@ import { FileIcon } from "./file-icon";
 import { FileBody, OpenPage, OpenRaw, useFile } from "./preview-views";
 import { DiffBody } from "./diff-view";
 import { TaskList } from "./background-tasks";
+import { BackToFiles, FilesBody, FilesTitle } from "./file-browser";
 
 /** Wide enough for the panel beside the chat rather than over it. */
 const WIDE_QUERY = "(min-width: 80rem)";
@@ -119,10 +120,12 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
 /** The file's name and where it is, with what can be done to it. */
 function Title({ file, source, target, toggleSource }: { file: FileState; source: boolean; target: PreviewTarget; toggleSource: () => void }) {
   if (target.kind === "tasks") return <TasksTitle session={target.session} />;
+  if (target.kind === "files") return <FilesTitle path={target.path} />;
   const kind = file.data?.kind ?? "text";
   const name = file.data?.name ?? baseName(target.path);
   return (
     <div className="flex min-w-0 items-start gap-2">
+      {target.kind === "file" && target.from ? <BackToFiles from={target.from} session={target.session} /> : null}
       <FileIcon className="mt-0.5 size-5 shrink-0 text-ink-muted" kind={kind} name={name} />
       <div className="grid min-w-0 flex-1">
         <span className="truncate text-[0.9375rem] font-semibold">{target.kind === "diff" ? `${name} 的變更` : name}</span>
@@ -155,5 +158,8 @@ function TasksTitle({ session }: { session: string }) {
 function Body({ file, source, target }: { file: FileState; source: boolean; target: PreviewTarget }) {
   if (target.kind === "diff") return <DiffBody target={target} />;
   if (target.kind === "tasks") return <TaskList session={target.session} />;
+  if (target.kind === "files") return <FilesBody key={`${target.path}
+${target.query}
+${target.mode}`} mode={target.mode} path={target.path} query={target.query} session={target.session} />;
   return <FileBody file={file} line={target.line} session={target.session} source={source} />;
 }

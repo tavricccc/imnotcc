@@ -1,13 +1,18 @@
-// What the preview panel shows: one file, one file's change in a turn, or a session's
-// background work. Opening something else replaces it.
+// What the preview panel shows: one file, one file's change in a turn, a session's background
+// work, or the file browser. Opening something else replaces it.
 import { createStore } from "./store-core";
 import type { FileChange } from "./turns";
 
 export type PreviewTarget =
-  | { kind: "file"; session: string; path: string; line?: number }
+  /** `from` is the browser folder the file was opened from, for going back to it. */
+  | { kind: "file"; session: string; path: string; line?: number; from?: BrowseState }
   /** `files` are the turn's other changed files, for stepping through them one at a time. */
   | { kind: "diff"; session: string; turn: string; path: string; files: FileChange[] }
-  | { kind: "tasks"; session: string };
+  | { kind: "tasks"; session: string }
+  /** The file browser at `path` (the session's folder when absent), or a search under it. */
+  | ({ kind: "files"; session: string } & BrowseState);
+
+export interface BrowseState { path?: string; query?: string; mode?: "name" | "content" }
 
 /** One piece of background work, as the server lists it (shells, agents, monitors). */
 export interface BackgroundTask {
