@@ -48,7 +48,7 @@ interface Context { used: number; threshold: number; max: number; categories?: {
 interface Queued { uuid: string; text: string; images: number }
 interface LiveState {
   queued: Queued[];
-  status: string; open: boolean; draft: string; pending: PermissionRequest[]; mode: string; model: string | null;
+  status: string; open: boolean; drafting: boolean; pending: PermissionRequest[]; mode: string; model: string | null;
   effort: string | null; context: Context | null; cost: { usd: number; added: number; removed: number } | null;
 }
 type SheetName = "options" | "window" | "usage" | "rename" | "remove" | null;
@@ -101,7 +101,15 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const [page, setPage] = React.useState({ start: initialHistory?.start ?? 0, total: initialHistory?.total ?? 0, loadingEarlier: false });
   // What each turn changed, by its prompt, as git counted it on the server.
   const [changes, setChanges] = React.useState<Record<string, FileChange[]>>({});
-  const [s, setS] = React.useState<LiveState>({ queued: [], status: firstPrompt ? "running" : "idle", open: false, draft: "", pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
+  // The reply still streaming lives outside React state, so a delta only re-renders <Draft>;
+  // `s.drafting` changes only when it starts or ends.
+  const draft = React.useRef<DraftText>(null as unknown as DraftText);
+  draft.current ??= createDraft();
+  const setDraft = React.useCallback((text: string) => {
+    draft.current.set(text);
+    setS((x) => (x.drafting === !!text ? x : { ...x, drafting: !!text }));
+  }, []);
+  const [s, setS] = React.useState<LiveState>({ queued: [], status: firstPrompt ? "running" : "idle", open: false, drafting: false, pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
   // What was typed but not sent stays with this session, across leaving it and reloading.
   const draftKey = `imnotcc:composer:${id}`;
   const [text, setText] = React.useState(() => {
@@ -172,7 +180,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   }, []);
 
   const draftShown = React.useRef(false);
-  React.useEffect(() => { draftShown.current = !!s.draft; });
+  React.useEffect(() => { draftShown.current = s.drafting; });
   const t = transcript.current;
   const bump = React.useCallback((how: "force" | "near" | null = "near") => {
     if (how === "force") stuck.current = true;
@@ -201,9 +209,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   // toward the bottom and keeps chasing it while output grows; scrolling up stops it.
   const glide = React.useRef(0);
   const jump = React.useRef(true);
-  React.useLayoutEffect(() => {
-    if (!follow.current) return;
-    follow.current = false;
+  const glideNow = React.useCallback(() => {
     const el = scrollArea.current;
     if (!el) return;
     if (jump.current || matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -219,7 +225,14 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       glide.current = requestAnimationFrame(step);
     };
     glide.current = requestAnimationFrame(step);
+  }, []);
+  React.useLayoutEffect(() => {
+    if (!follow.current) return;
+    follow.current = false;
+    glideNow();
   });
+  // The streaming reply grew: keep up with it, as a re-render that asked to follow would.
+  const followDraft = React.useCallback(() => { if (stuck.current) glideNow(); }, [glideNow]);
   React.useEffect(() => () => cancelAnimationFrame(glide.current), []);
 
   const loadHistory = React.useCallback(() => refreshCached(historyUrl, () => get<History>(historyUrl)), [historyUrl]);
@@ -294,7 +307,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         queueArchive();
         bump();
       } else if (msg.type === "assistant" || msg.type === "user") {
-        if (msg.type === "assistant" && msg.parent_tool_use_id === null) setS((x) => ({ ...x, draft: "" }));
+        if (msg.type === "assistant" && msg.parent_tool_use_id === null) setDraft("");
         const before = tr.items.length;
         addMessage(tr, msg.timestamp ? msg : { ...msg, timestamp: new Date().toISOString() }, { subagent: msg.parent_tool_use_id != null });
         // The streamed draft becomes this text: it is already on screen, so it does not rise again.
@@ -310,7 +323,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         saveArchive();
         bump();
       } else if (msg.type === "result") {
-        setS((x) => ({ ...x, draft: "" }));
+        setDraft("");
         // The title is made from the first prompt (or a summary) once the transcript exists.
         void loadMeta().then((r) => { if (!gone) setMeta(r); }).catch(() => {});
         void updateHistory().catch(() => {});
@@ -325,11 +338,12 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     function onEvent(m: any) {
       switch (m.kind) {
         case "snapshot":
-          setS((x) => ({ ...x, status: m.status, open: m.open, draft: m.draft, pending: m.pending, mode: m.permissionMode, model: m.model, effort: m.effort, context: m.context, cost: m.cost, queued: m.queued ?? [] }));
+          setDraft(m.draft ?? "");
+          setS((x) => ({ ...x, status: m.status, open: m.open, pending: m.pending, mode: m.permissionMode, model: m.model, effort: m.effort, context: m.context, cost: m.cost, queued: m.queued ?? [] }));
           // After a reconnect the socket may have missed messages: read the transcript again.
           if (snapshots++ > 0) void updateHistory().catch(() => {});
           break;
-        case "delta": setS((x) => ({ ...x, draft: x.draft + m.text })); bump(); break;
+        case "delta": setDraft(draft.current.text + m.text); break;
         case "sdk":
           if (initialMessages) initialMessages.push(m.msg);
           else onSdk(m.msg);
@@ -356,7 +370,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         case "permission": setS((x) => ({ ...x, pending: [...x.pending, m] })); bump(); break;
         case "permission-done": setS((x) => ({ ...x, pending: x.pending.filter((p) => p.id !== m.id) })); break;
         case "error": addNote(transcript.current, m.message, { error: true }); bump(); break;
-        case "closed": setS((x) => ({ ...x, open: false, draft: "" })); break;
+        case "closed": setDraft(""); setS((x) => ({ ...x, open: false })); break;
         case "queued": setS((x) => ({ ...x, queued: m.queued })); break;
         case "dequeued": {
           // A held prompt went out as its own turn: it joins the transcript now.
@@ -503,7 +517,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
 
   return (
     <SessionContext.Provider value={id}>
-    <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:top-[var(--safe-top)] md:left-[var(--desktop-inset)] md:h-[calc(100dvh-var(--safe-top))] md:overflow-hidden md:rounded-tl-2xl md:border-t md:border-l md:border-line md:bg-surface motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace}>
+    <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:top-[var(--safe-top)] md:left-[var(--desktop-inset)] md:h-[calc(100dvh-var(--safe-top))] md:overflow-hidden md:rounded-tl-2xl md:border-t md:border-l md:border-line md:bg-surface md:[--edge-fade:var(--surface)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace}>
       <div
         className="relative flex min-h-0 flex-1 flex-col motion-safe:transition-[margin-right] motion-safe:duration-[var(--preview-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]"
         style={sidePreview ? { marginRight: "var(--preview-width, 0px)" } : undefined}
@@ -539,7 +553,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
                 : row.kind === "files" ? <FilesCard files={row.files} key={row.key} onOpen={(path) => openPreview({ kind: "diff", session: id, turn: row.turn, path, files: row.files })} />
                 : <Entry bubbles={view.bubbles} item={row.item} key={row.item.key} />);
             })()}
-            {s.draft ? <Markdown className={cn("content-in", view.bubbles && BUBBLE)} text={s.draft} /> : null}
+            {s.drafting ? <Draft className={cn("content-in", view.bubbles ? BUBBLE : "draft-stream")} onGrow={followDraft} source={draft.current} /> : null}
             {s.pending.filter((p) => p !== question).map((p) => <PermissionCard key={p.id} onAnswer={(a) => answer(p, a)} req={p} />)}
             {status ? <p className="message-in justify-self-start text-[0.9375rem]" key={status} role="status"><span className="shimmer">{status}</span></p> : null}
           </main>
@@ -677,6 +691,42 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     </div>
     </SessionContext.Provider>
   );
+}
+
+interface DraftText { text: string; set(text: string): void; subscribe(fn: () => void): () => void }
+function createDraft(): DraftText {
+  const subs = new Set<() => void>();
+  return {
+    text: "",
+    set(text) { if (text === this.text) return; this.text = text; for (const fn of subs) fn(); },
+    subscribe(fn) { subs.add(fn); return () => { subs.delete(fn); }; },
+  };
+}
+
+// Re-parsing the whole reply as Markdown on every batch is what costs; at most once a frame,
+// and a little less often once the reply is long.
+function Draft({ className, onGrow, source }: { className?: string; onGrow: () => void; source: DraftText }) {
+  const [text, setText] = React.useState(source.text);
+  React.useEffect(() => {
+    let frame = 0;
+    let timer = 0;
+    let last = 0;
+    const show = () => {
+      frame = 0;
+      last = performance.now();
+      setText(source.text);
+    };
+    const off = source.subscribe(() => {
+      if (frame || timer) return;
+      const ahead = last + (source.text.length > 8000 ? 120 : 0) - performance.now();
+      if (ahead <= 0) { frame = requestAnimationFrame(show); return; }
+      timer = window.setTimeout(() => { timer = 0; frame = requestAnimationFrame(show); }, ahead);
+    });
+    setText(source.text);
+    return () => { off(); cancelAnimationFrame(frame); clearTimeout(timer); };
+  }, [source]);
+  React.useLayoutEffect(onGrow, [text, onGrow]);
+  return <Markdown className={className} text={text} />;
 }
 
 const BUBBLE = "max-w-[92%] justify-self-start rounded-[1.25rem] rounded-bl-md bg-surface-solid px-4 py-2.5 shadow-panel";
