@@ -26,6 +26,7 @@ import { closePreview, openPreview, preview, refreshPreview } from "@/lib/previe
 import { PreviewPanel, useWidePreview } from "@/components/preview-panel";
 import { PermissionCard, type Answer, type PermissionRequest } from "@/components/permission-card";
 import { ToolCard } from "@/components/tool-card";
+import { BackgroundTasks, type BackgroundTask } from "@/components/background-tasks";
 import { FilesCard, TurnWork } from "@/components/turn";
 import { isStep, turnRows, type FileChange } from "@/lib/turns";
 import { BUSY_SEND_LABEL, prefs } from "@/lib/prefs";
@@ -48,7 +49,7 @@ interface Context { used: number; threshold: number; max: number; categories?: {
 interface Queued { uuid: string; text: string; images: number }
 interface LiveState {
   queued: Queued[];
-  status: string; open: boolean; drafting: boolean; pending: PermissionRequest[]; mode: string; model: string | null;
+  status: string; open: boolean; drafting: boolean; tasks: BackgroundTask[]; pending: PermissionRequest[]; mode: string; model: string | null;
   effort: string | null; context: Context | null; cost: { usd: number; added: number; removed: number } | null;
 }
 type SheetName = "options" | "window" | "usage" | "rename" | "remove" | null;
@@ -109,7 +110,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     draft.current.set(text);
     setS((x) => (x.drafting === !!text ? x : { ...x, drafting: !!text }));
   }, []);
-  const [s, setS] = React.useState<LiveState>({ queued: [], status: firstPrompt ? "running" : "idle", open: false, drafting: false, pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
+  const [s, setS] = React.useState<LiveState>({ queued: [], status: firstPrompt ? "running" : "idle", open: false, drafting: false, tasks: [], pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
   // What was typed but not sent stays with this session, across leaving it and reloading.
   const draftKey = `imnotcc:composer:${id}`;
   const [text, setText] = React.useState(() => {
@@ -339,7 +340,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       switch (m.kind) {
         case "snapshot":
           setDraft(m.draft ?? "");
-          setS((x) => ({ ...x, status: m.status, open: m.open, pending: m.pending, mode: m.permissionMode, model: m.model, effort: m.effort, context: m.context, cost: m.cost, queued: m.queued ?? [] }));
+          setS((x) => ({ ...x, status: m.status, open: m.open, tasks: m.tasks ?? [], pending: m.pending, mode: m.permissionMode, model: m.model, effort: m.effort, context: m.context, cost: m.cost, queued: m.queued ?? [] }));
           // After a reconnect the socket may have missed messages: read the transcript again.
           if (snapshots++ > 0) void updateHistory().catch(() => {});
           break;
@@ -372,6 +373,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         case "error": addNote(transcript.current, m.message, { error: true }); bump(); break;
         case "closed": setDraft(""); setS((x) => ({ ...x, open: false })); break;
         case "queued": setS((x) => ({ ...x, queued: m.queued })); break;
+        case "tasks": setS((x) => ({ ...x, tasks: m.tasks })); break;
         case "dequeued": {
           // A held prompt went out as its own turn: it joins the transcript now.
           const held = heldLocal.current.get(m.uuid);
@@ -513,6 +515,13 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     } catch { toast.error("無法複製"); }
   }
 
+  const tasksChip = <BackgroundTasks session={id} tasks={s.tasks} />;
+  const shownItems = (hideWork ? t.items.filter((it) => it.type !== "tool" && it.type !== "thinking") : t.items)
+    .filter((it, i, all) => !(isInterrupt(it) && isInterrupt(all.slice(0, i).findLast((p) => !isStep(p)))));
+  const rows = view.groupTools ? turnRows(shownItems, running, changes) : null;
+  const lastRow = rows?.at(-1);
+  // The background-work label sits beside the last reply's copy button when there is one.
+  const tasksBesideCopy = !running && lastRow?.kind === "copy";
   const currentWindow = s.context?.max ? tokens(s.context.max) : null;
 
   return (
@@ -550,18 +559,15 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
             {page.start > 0 ? (
               <Button className="justify-self-center" onClick={() => void loadEarlier()} size="sm" status={page.loadingEarlier ? "loading" : "idle"} variant="ghost">載入更早的訊息</Button>
             ) : null}
-            {(() => {
-              const items = (hideWork ? t.items.filter((it) => it.type !== "tool" && it.type !== "thinking") : t.items)
-                .filter((it, i, all) => !(isInterrupt(it) && isInterrupt(all.slice(0, i).findLast((p) => !isStep(p)))));
-              if (!view.groupTools) return items.map((item) => <Entry bubbles={view.bubbles} item={item} key={item.key} />);
-              return turnRows(items, running, changes).map((row) => row.kind === "work"
+            {!rows ? shownItems.map((item) => <Entry bubbles={view.bubbles} item={item} key={item.key} />)
+              : rows.map((row) => row.kind === "work"
                 ? <TurnWork end={row.end} items={row.items} key={row.key} live={row.live} start={row.start} />
-                : row.kind === "copy" ? <CopyTurn key={row.key} text={row.text} />
+                : row.kind === "copy" ? <CopyTurn extra={row === lastRow && tasksBesideCopy ? tasksChip : null} key={row.key} text={row.text} />
                 : row.kind === "files" ? <FilesCard files={row.files} key={row.key} onOpen={(path) => openPreview({ kind: "diff", session: id, turn: row.turn, path, files: row.files })} />
-                : <Entry bubbles={view.bubbles} item={row.item} key={row.item.key} />);
-            })()}
+                : <Entry bubbles={view.bubbles} item={row.item} key={row.item.key} />)}
             {s.drafting ? <Draft className={cn("content-in", view.bubbles ? BUBBLE : "draft-stream")} onGrow={followDraft} source={draft.current} /> : null}
             {s.pending.filter((p) => p !== question).map((p) => <PermissionCard key={p.id} onAnswer={(a) => answer(p, a)} req={p} />)}
+            {s.tasks.length > 0 && !tasksBesideCopy ? <div className="-mt-2 justify-self-start">{tasksChip}</div> : null}
             {status ? <p className="message-in justify-self-start text-[0.9375rem]" key={status} role="status"><span className="shimmer">{status}</span></p> : null}
           </main>
       </div>
@@ -774,14 +780,14 @@ function Entry({ bubbles, item }: { bubbles: boolean; item: Item }) {
 const isInterrupt = (it?: Item) => !!it && it.type === "note" && it.text === "已中斷";
 
 /** A small button under a finished turn that copies the answer it ended with. */
-function CopyTurn({ text }: { text: string }) {
+function CopyTurn({ extra, text }: { extra?: React.ReactNode; text: string }) {
   const [done, setDone] = React.useState(false);
   React.useEffect(() => {
     if (!done) return;
     const timer = window.setTimeout(() => setDone(false), 1500);
     return () => window.clearTimeout(timer);
   }, [done]);
-  return (
+  const button = (
     <button
       aria-label="複製回覆"
       className="-mt-2 grid size-7 place-items-center justify-self-start rounded-md text-ink-faint outline-none transition-colors duration-[var(--motion-control)] hover:bg-surface-raised hover:text-ink-muted focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
@@ -792,6 +798,8 @@ function CopyTurn({ text }: { text: string }) {
       {done ? <Check className="size-4" weight="bold" /> : <Copy className="size-4" />}
     </button>
   );
+  if (!extra) return button;
+  return <div className="-mt-2 flex items-center gap-1 justify-self-start [&>button:first-child]:mt-0">{button}{extra}</div>;
 }
 
 /** The auto-compact window for this session's model, sent as /autocompact. */
