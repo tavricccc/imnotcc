@@ -11,7 +11,7 @@ use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::window::{Effect, EffectsBuilder};
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_dialog::DialogExt;
 
@@ -251,8 +251,8 @@ const TITLEBAR_SCRIPT: &str = r#"
     };
     btns.appendChild(mkBtn("min", "最小化", '<svg viewBox="0 0 10 10"><line x1="1" y1="5.5" x2="9" y2="5.5"/></svg>', () => win && win.minimize()));
     btns.appendChild(mkBtn("max", "最大化", '<svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7"/></svg>', () => win && win.toggleMaximize()));
-    btns.appendChild(mkBtn("close", "隱藏到系統匣", '<svg viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/></svg>', () => {
-      if (win) win.hide();
+    btns.appendChild(mkBtn("close", "關閉（程式留在系統匣）", '<svg viewBox="0 0 10 10"><line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/></svg>', () => {
+      if (win) win.close();
     }));
     bar.appendChild(btns);
     document.body.appendChild(bar);
@@ -265,27 +265,59 @@ const TITLEBAR_SCRIPT: &str = r#"
 })();
 "#;
 
-/// Show the window on `url`, or on the setup page when None. An existing window is navigated:
-/// destroying it and building a new "main" right away fails, as the label is freed later.
+/// Show the window on `url`, or on the setup page when None. An existing window is navigated.
+/// Closing the window destroys it (freeing the WebView2 processes); the app stays in the tray.
+/// A destroyed window's label is freed a little later, so building "main" right after a close
+/// can fail with a label conflict: the build is then retried off the main thread.
 pub fn open_window(app: &AppHandle, url: Option<String>, show: bool) -> Result<(), String> {
     let parsed: tauri::Url = match &url {
         Some(u) => u.parse().map_err(|_| format!("網址格式不對：{u}"))?,
         None => SETUP_URL.parse().unwrap(),
     };
     if let Some(w) = app.get_webview_window("main") {
-        w.navigate(parsed).map_err(|e| e.to_string())?;
-        if show {
-            let _ = w.unminimize();
-            let _ = w.show();
-            let _ = w.set_focus();
+        // A window that is mid-destroy can refuse to navigate: fall through and build anew.
+        if w.navigate(parsed.clone()).is_ok() {
+            if show {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+            return Ok(());
         }
-        return Ok(());
     }
     let target = match url {
         Some(_) => WebviewUrl::External(parsed),
         None => WebviewUrl::App("index.html".into()),
     };
-    let w = WebviewWindowBuilder::new(app, "main", target)
+    match build_main(app, target.clone(), show) {
+        Err(e) if is_label_conflict(&e) => {
+            let app = app.clone();
+            std::thread::spawn(move || {
+                for _ in 0..30 {
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    match build_main(&app, target.clone(), show) {
+                        Err(e) if is_label_conflict(&e) => continue,
+                        Err(e) => {
+                            eprintln!("[imnotcc] could not open the window: {e}");
+                            return;
+                        }
+                        Ok(()) => return,
+                    }
+                }
+                eprintln!("[imnotcc] could not open the window: label \"main\" was never freed");
+            });
+            Ok(())
+        }
+        r => r.map_err(|e| e.to_string()),
+    }
+}
+
+fn is_label_conflict(e: &tauri::Error) -> bool {
+    matches!(e, tauri::Error::WindowLabelAlreadyExists(_) | tauri::Error::WebviewLabelAlreadyExists(_))
+}
+
+fn build_main(app: &AppHandle, target: WebviewUrl, show: bool) -> tauri::Result<()> {
+    WebviewWindowBuilder::new(app, "main", target)
         .title("imnotcc")
         .inner_size(1100.0, 820.0)
         .min_inner_size(360.0, 480.0)
@@ -294,16 +326,7 @@ pub fn open_window(app: &AppHandle, url: Option<String>, show: bool) -> Result<(
         .effects(EffectsBuilder::new().effect(Effect::Mica).build())
         .initialization_script(TITLEBAR_SCRIPT)
         .visible(show)
-        .build()
-        .map_err(|e| e.to_string())?;
-    let w2 = w.clone();
-    w.on_window_event(move |e| {
-        // Closing the window keeps the app (and the local server) in the tray.
-        if let WindowEvent::CloseRequested { api, .. } = e {
-            api.prevent_close();
-            let _ = w2.hide();
-        }
-    });
+        .build()?;
     Ok(())
 }
 
