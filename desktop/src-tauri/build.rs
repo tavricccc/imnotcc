@@ -17,6 +17,7 @@ fn main() {
                 "reveal_file",
                 "open_setup",
                 "open_external",
+                "open_link",
                 "show_password",
             ]),
         ),

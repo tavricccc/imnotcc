@@ -648,6 +648,36 @@ fn open_external(app: AppHandle, window: WebviewWindow, url: String) -> Result<(
     std::process::Command::new("explorer").arg(u.as_str()).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Opens a link from a reply in the system browser. Only http and https: anything else (file:,
+/// javascript:, custom protocol handlers) is refused. The address is parsed and written out again,
+/// and handed to the shell as one string rather than through explorer's comma-separated arguments.
+#[tauri::command]
+fn open_link(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), String> {
+    from_trusted_page(&app, &window)?;
+    let u: tauri::Url = url.parse().map_err(|_| "網址格式不對".to_string())?;
+    if u.scheme() != "https" && u.scheme() != "http" {
+        return Err("只能開啟 http 或 https 網址".into());
+    }
+    shell_open(u.as_str())
+}
+
+#[cfg(windows)]
+fn shell_open(target: &str) -> Result<(), String> {
+    use windows_sys::Win32::UI::Shell::ShellExecuteW;
+    use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    let wide = |s: &str| s.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let (verb, file) = (wide("open"), wide(target));
+    // SAFETY: both strings are NUL-terminated and outlive the call; the other pointers may be null.
+    let code = unsafe { ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), file.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL) } as isize;
+    // ShellExecuteW reports success with a value above 32.
+    if code > 32 { Ok(()) } else { Err(format!("無法開啟瀏覽器（{code}）")) }
+}
+
+#[cfg(not(windows))]
+fn shell_open(target: &str) -> Result<(), String> {
+    std::process::Command::new("xdg-open").arg(target).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn open_setup(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     from_trusted_page(&app, &window)?;
@@ -744,6 +774,7 @@ pub fn run() {
             reveal_file,
             open_setup,
             open_external,
+            open_link,
             show_password
         ])
         .setup(move |app| {

@@ -38,6 +38,7 @@
     "allow-reveal-file",
     "allow-open-setup",
     "allow-open-external",
+    "allow-open-link",
     "allow-show-password"
   ]
 }
