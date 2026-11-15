@@ -115,10 +115,12 @@ function EffortSlider({ disabled, effort, levels, onEffort }: { disabled?: boole
   );
 }
 
-/** Desktop: a pill track with a dot per level and a big round thumb. Commits when let go. */
+/** Desktop: a pill track with a dot per level and a big round thumb. Commits when let go.
+    The thumb is drawn here (the native one is invisible, only taking the drag) so it moves with the fill.
+    No "default" stop: with no effort set, the thumb rests on medium. */
 function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean; effort: string; levels: string[]; onEffort: (effort: string) => void }) {
-  const steps = ["", ...levels];
-  const index = Math.max(0, steps.indexOf(effort));
+  const steps = levels;
+  const index = steps.indexOf(effort) >= 0 ? steps.indexOf(effort) : Math.max(0, steps.indexOf("medium"));
   const [draft, setDraft] = React.useState(index);
   const sent = React.useRef(effort);
   React.useEffect(() => { setDraft(index); sent.current = effort; }, [index, effort]);
@@ -126,17 +128,18 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
   const label = (v: string) => EFFORTS.find((e) => e.value === v)?.label ?? v;
   const last = Math.max(1, steps.length - 1);
   const at = (i: number) => `calc(14px + (100% - 28px) * ${i / last})`;
+  const move = "duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]";
   return (
     <div className="relative h-7">
       <div aria-hidden className="absolute inset-0 rounded-full bg-ink/10" />
-      <div aria-hidden className="absolute inset-y-0 left-0 rounded-full bg-contrast transition-[width] duration-150" style={{ width: `calc(${at(draft)} + 14px)` }} />
+      <div aria-hidden className={cn("absolute inset-y-0 left-0 rounded-full bg-contrast transition-[width]", move)} style={{ width: `calc(${at(draft)} + 14px)` }} />
       {steps.map((s, i) => (
-        <span aria-hidden className={cn("absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full", i < draft ? "bg-white/70" : "bg-ink/30")} key={s || "default"} style={{ left: at(i) }} />
+        <span aria-hidden className={cn("absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors", move, i < draft ? "bg-white/70" : "bg-ink/30")} key={s} style={{ left: at(i) }} />
       ))}
       <input
         aria-label="Effort"
         aria-valuetext={label(steps[draft])}
-        className="effort-pill absolute inset-0"
+        className="effort-pill peer absolute inset-0"
         disabled={disabled}
         max={steps.length - 1}
         min={0}
@@ -148,6 +151,7 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
         type="range"
         value={draft}
       />
+      <span aria-hidden className={cn("pointer-events-none absolute top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/25%)] transition-[left,box-shadow]", move, "peer-focus-visible:shadow-[0_0_0_4px_var(--focus-ring,rgb(220_58_28/35%))]")} style={{ left: at(draft) }} />
     </div>
   );
 }
@@ -231,7 +235,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
             <div className="grid gap-2 p-3">
               <div className="grid grid-cols-[1.75rem_1fr_1.75rem] items-center">
                 <span />
-                <span aria-live="polite" className="text-center text-sm font-semibold text-contrast">{chosen.efforts ? effortName || "預設" : "—"}</span>
+                <span aria-live="polite" className="text-center text-sm font-semibold text-contrast">{chosen.efforts ? effortName || (EFFORTS.find((e) => e.value === "medium")?.label ?? "medium") : "—"}</span>
                 <button aria-label="Effort 改回預設" className="grid size-7 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || !chosen.efforts} onClick={() => onEffort("")} type="button">
                   <ArrowCounterClockwise className="size-4" />
                 </button>
