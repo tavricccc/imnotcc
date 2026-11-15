@@ -2,10 +2,12 @@
 // the element under the pointer, and its ancestors, what can be done there (see `useContextItems`),
 // and adds the basics: copy what is selected, cut/paste in a field, select all.
 // Shift + right-click still opens the native menu; a touch long-press is left to the phone.
+// Links to other sites get open / copy; in the desktop app a click on one opens the system browser.
 import * as React from "react";
 import { DropdownMenu } from "radix-ui";
 import type { Icon } from "@phosphor-icons/react";
-import { ClipboardText, Copy, Quotes, Scissors, SelectionAll } from "@phosphor-icons/react/ssr";
+import { ArrowSquareOut, ClipboardText, Copy, Link, Quotes, Scissors, SelectionAll } from "@phosphor-icons/react/ssr";
+import { externalHref, interceptLinks, OPEN_LINK_LABEL, openLink } from "@/lib/links";
 import { cn } from "@/lib/utils";
 
 export interface ContextItem {
@@ -74,13 +76,21 @@ export function ContextMenuHost() {
         const items = provider?.(target);
         if (items?.length) { groups.push(items); break; }
       }
+      // A link to another site: open it (system browser in the desktop app, else a new tab) or copy it.
+      const href = externalHref(target);
+      if (href) groups.push([
+        { key: "open-link", label: OPEN_LINK_LABEL(), icon: ArrowSquareOut, onSelect: () => openLink(href) },
+        { key: "copy-link", label: "複製連結", icon: Link, onSelect: () => { void copy(href); } },
+      ]);
       const basics = basicItems(target);
       if (basics.length) groups.push(basics);
       if (groups.length) setMenu({ x: e.clientX, y: e.clientY, items: groups });
     };
     window.addEventListener("pointerdown", onPointer, true);
     document.addEventListener("contextmenu", onMenu);
+    const stopLinks = interceptLinks();
     return () => {
+      stopLinks();
       window.removeEventListener("pointerdown", onPointer, true);
       document.removeEventListener("contextmenu", onMenu);
     };
