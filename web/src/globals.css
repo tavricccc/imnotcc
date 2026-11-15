@@ -144,4 +144,6 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 .effort-pill::-moz-range-thumb { width: 24px; height: 24px; border: 0; border-radius: 999px; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 25%); }
 .effort-pill:active::-webkit-slider-thumb { transform: scale(1.06); }
 .effort-pill:focus-visible { outline: none; }
+.auto-height { transition: height 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) { .auto-height { transition: none; } }
 .effort-pill:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--focus-ring, rgb(220 58 28 / 35%)); }

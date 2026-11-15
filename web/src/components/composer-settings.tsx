@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import { ListGroup } from "@/ui/list";
 import { ChoiceRow } from "@/ui/list-controls";
-import { Popover } from "@/ui/popover";
+import { AutoHeight, Popover } from "@/ui/popover";
 import { Sheet } from "@/ui/sheet";
 import { useCompactViewport } from "@/ui/use-compact-viewport";
 
@@ -172,8 +172,9 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
   const effortName = effort ? EFFORTS.find((e) => e.value === effort)?.label ?? effort : "";
   const compact = useCompactViewport();
   const [view, setView] = React.useState<"effort" | "models">("effort");
-  React.useEffect(() => { if (panel === "model") setView("effort"); }, [panel]);
-  const pickRow = (m: ModelOption) => <ChoiceRow detail={m.detail} key={m.value || "default"} label={m.label} onSelect={() => { onModel(m.value); setView("effort"); }} selected={model === m.value} />;
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  React.useEffect(() => { if (panel === "model") { setView("effort"); setMoreOpen(false); } }, [panel]);
+  const pickRow = (m: ModelOption) => <ChoiceRow detail={m.detail} key={m.value || "default"} label={m.label} onSelect={() => { onModel(m.value); setMoreOpen(false); setView("effort"); }} selected={model === m.value} />;
   const modelTrigger = (
     <SettingButton aria-label={`模型：${modelName}${effortName ? `，Effort：${effortName}` : ""}`} className="min-w-10 max-[359px]:max-w-24" disabled={disabled}>
       <Cpu className="hidden sm:block" />
@@ -199,30 +200,41 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
         </ListGroup>)}
       <span className="flex-1" />
       {compact ? null : (
-        <Popover className="w-72 p-3" onOpenChange={(open) => setPanel(open ? "model" : null)} open={panel === "model"} side="top" trigger={modelTrigger}>
+        <Popover className="w-72 p-0" onOpenChange={(open) => setPanel(open ? "model" : null)} open={panel === "model"} side="top" trigger={modelTrigger}>
+          <AutoHeight>
           {view === "models" ? (
-            <div className="grid max-h-[60svh] gap-2 overflow-y-auto">
+            <div className="grid max-h-[60svh] gap-2 overflow-y-auto p-3">
               <button className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setView("effort")} type="button">
                 <CaretLeft className="size-3" weight="bold" />模型
               </button>
               <ListGroup label="模型" role="radiogroup">{main.map((m) => pickRow(m))}</ListGroup>
-              {more.length ? <ListGroup label="更多模型" role="radiogroup">{more.map((m) => pickRow(m))}</ListGroup> : null}
+              {more.length ? (
+                <Popover align="end" className="w-64 p-0" onOpenChange={setMoreOpen} open={moreOpen} side="left" trigger={
+                  <button aria-expanded={moreOpen} className={cn("flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-ink-muted hover:bg-ink/5 hover:text-ink", moreOpen && "bg-ink/5 text-ink")} type="button">
+                    更多模型（{more.length}）<CaretRight className="size-3" weight="bold" />
+                  </button>}>
+                  <div className="max-h-[60svh] overflow-y-auto p-3">
+                    <ListGroup label="更多模型" role="radiogroup">{more.map((m) => pickRow(m))}</ListGroup>
+                  </div>
+                </Popover>
+              ) : null}
             </div>
           ) : (
-            <div className="grid gap-2">
-              <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
+            <div className="grid gap-2 p-3">
+              <div className="grid grid-cols-[1.75rem_1fr_1.75rem] items-center">
                 <span />
                 <span aria-live="polite" className="text-center text-sm font-semibold text-contrast">{chosen.efforts ? effortName || "預設" : "—"}</span>
-                <button aria-label="Effort 改回預設" className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || !chosen.efforts} onClick={() => onEffort("")} type="button">
+                <button aria-label="Effort 改回預設" className="grid size-7 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || !chosen.efforts} onClick={() => onEffort("")} type="button">
                   <ArrowCounterClockwise className="size-4" />
                 </button>
               </div>
-              <button className="-mt-1 mb-1 flex items-center gap-1 justify-self-center rounded-md px-2 text-sm text-ink-muted hover:text-ink" onClick={() => setView("models")} type="button">
+              <button className="-mt-2.5 flex items-center gap-1 justify-self-center rounded-md px-2 text-xs text-ink-muted hover:text-ink" onClick={() => setView("models")} type="button">
                 {modelName}<CaretRight className="size-3" weight="bold" />
               </button>
               {chosen.efforts ? <EffortPill effort={effort} levels={chosen.efforts} onEffort={onEffort} /> : <p className="text-center text-xs text-ink-muted">這個模型不支援調整 Effort。</p>}
             </div>
           )}
+          </AutoHeight>
         </Popover>
       )}
       {compact && setting("model", "模型與 Effort",

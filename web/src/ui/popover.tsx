@@ -3,12 +3,13 @@ import { Popover as PopoverPrimitive, Tooltip as TooltipPrimitive } from "radix-
 import { cn } from "@/lib/utils";
 
 /** A small panel anchored to its trigger, such as a search field behind a button. */
-export function Popover({ children, className, onOpenChange, open, side, trigger }: {
+export function Popover({ align = "end", children, className, onOpenChange, open, side, trigger }: {
+  align?: "start" | "center" | "end";
   children: React.ReactNode;
   className?: string;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
-  side?: "top" | "bottom";
+  side?: "top" | "bottom" | "left" | "right";
   trigger: React.ReactNode;
 }) {
   return (
@@ -16,7 +17,7 @@ export function Popover({ children, className, onOpenChange, open, side, trigger
       <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
-          align="end"
+          align={align}
           className={cn("float-surface z-50 w-[min(22rem,calc(100vw-2rem))] rounded-panel border border-line bg-surface-solid p-4 text-ink shadow-float outline-none", className)}
           collisionPadding={16}
           side={side}
@@ -26,6 +27,24 @@ export function Popover({ children, className, onOpenChange, open, side, trigger
         </PopoverPrimitive.Content>
       </PopoverPrimitive.Portal>
     </PopoverPrimitive.Root>
+  );
+}
+
+/** Animates its height to follow its content, so a panel resizes smoothly when its view changes. */
+export function AutoHeight({ children, className }: { children: React.ReactNode; className?: string }) {
+  const inner = React.useRef<HTMLDivElement>(null);
+  const [height, setHeight] = React.useState<number>();
+  React.useLayoutEffect(() => {
+    const el = inner.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div className={cn("auto-height overflow-hidden", className)} style={{ height }}>
+      <div ref={inner}>{children}</div>
+    </div>
   );
 }
 
