@@ -135,6 +135,7 @@ class Runner {
   }
 
   async start() {
+    this.effortStale = false;
     const meta = this.meta;
     const settings = store.get().settings;
     const exists = !!(await wsl.readFor(meta.cwd, () => getSessionInfo(this.id, { dir: meta.cwd })).catch(() => null));
@@ -252,6 +253,7 @@ class Runner {
     }
     clearTimeout(this.idleTimer);
     await this.restarting?.catch(() => {});
+    await this.applyEffort();
     if (!this.q) {
       await this.start();
       if (uuid === this.id) await this.q.initializationResult();
@@ -291,26 +293,26 @@ class Runner {
     emit(this.id, { kind: 'model', model: model || null });
   }
 
-  // Effort is fixed when the process starts. With no process it is simply saved for the next start;
-  // with one, it may only change between turns, and the process is restarted (resuming the same
-  // session) so the new effort applies to the next message.
-  async setEffort(effort, { restart = false } = {}) {
-    if (this.restarting) throw new Error('Claude Code 正在重新啟動。');
-    if (this.q && this.status === 'running') throw new Error('這一輪結束後才能改 Effort。');
-    if (this.q && !restart) throw new Error('改 Effort 需要重新啟動 Claude Code。');
+  // Effort is fixed when the process starts. It is saved at once; a process already running keeps
+  // its old effort until the next message, which restarts it (resuming the same session) first.
+  async setEffort(effort) {
     this.meta.effort = effort || null;
     store.save();
-    if (this.q) {
-      this.restarting = (async () => {
-        this.close();
-        await this.done;
-        await this.start();
-        await this.q.initializationResult();
-        this.armIdle();
-      })().finally(() => { this.restarting = null; });
-      await this.restarting;
-    }
+    if (this.q) this.effortStale = true;
     emit(this.id, { kind: 'effort', effort: effort || null });
+  }
+
+  /** Before a new turn: restart a process still on an old effort. */
+  async applyEffort() {
+    if (!this.effortStale || !this.q || this.status === 'running') return;
+    this.effortStale = false;
+    this.restarting = (async () => {
+      this.close();
+      await this.done;
+      await this.start();
+      await this.q.initializationResult();
+    })().finally(() => { this.restarting = null; });
+    await this.restarting;
   }
 
   ask(tool, input, { signal, decisionReason, blockedPath }) {

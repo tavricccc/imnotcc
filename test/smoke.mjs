@@ -139,13 +139,11 @@ try {
   check('usage on demand', !!(await wait((e) => e.kind === 'context', 30_000).catch(() => null)));
   check('plan on demand (http)', 'plan' in ((await api('GET', '/api/usage?refresh=1')).body ?? {}));
 
-  // Effort between turns restarts the process and resumes the same conversation.
+  // Effort is saved at once; the next message restarts the process and resumes the same conversation.
   sendWs({ t: 'effort', effort: 'low' });
-  check('effort refused without restart', (await wait((e) => e.kind === 'error')).message.includes('重新啟動'));
-  sendWs({ t: 'effort', effort: 'low', restart: true });
-  await wait((e) => e.kind === 'closed');
-  check('effort applied after restart', (await wait((e) => e.kind === 'effort')).effort === 'low');
+  check('effort saved at once', (await wait((e) => e.kind === 'effort')).effort === 'low');
   sendWs({ t: 'send', text: 'What file name did you write in the previous turn? Reply with only the name.' });
+  await wait((e) => e.kind === 'closed');
   const re = await wait(isResult);
   check('resumed after effort restart', re.msg.subtype === 'success' && /a\.txt/.test(re.msg.result ?? ''), re.msg.result);
 

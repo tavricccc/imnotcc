@@ -125,11 +125,11 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
   const pick = (i: number) => { if (steps[i] !== sent.current) { sent.current = steps[i]; onEffort(steps[i]); } };
   const label = (v: string) => EFFORTS.find((e) => e.value === v)?.label ?? v;
   const last = Math.max(1, steps.length - 1);
-  const at = (i: number) => `calc(18px + (100% - 36px) * ${i / last})`;
+  const at = (i: number) => `calc(14px + (100% - 28px) * ${i / last})`;
   return (
-    <div className="relative h-9">
+    <div className="relative h-7">
       <div aria-hidden className="absolute inset-0 rounded-full bg-ink/10" />
-      <div aria-hidden className="absolute inset-y-0 left-0 rounded-full bg-contrast transition-[width] duration-150" style={{ width: `calc(${at(draft)} + 18px)` }} />
+      <div aria-hidden className="absolute inset-y-0 left-0 rounded-full bg-contrast transition-[width] duration-150" style={{ width: `calc(${at(draft)} + 14px)` }} />
       {steps.map((s, i) => (
         <span aria-hidden className={cn("absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full", i < draft ? "bg-white/70" : "bg-ink/30")} key={s || "default"} style={{ left: at(i) }} />
       ))}
@@ -152,11 +152,9 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
   );
 }
 
-export function ComposerSettings({ disabled, effort, effortLocked, mode, model, onEffort, onMode, onModel }: {
+export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMode, onModel }: {
   disabled?: boolean;
   effort: string;
-  /** A turn is running: effort can only change once it ends. */
-  effortLocked?: boolean;
   mode: string;
   model: string;
   onEffort: (effort: string) => void;
@@ -215,15 +213,14 @@ export function ComposerSettings({ disabled, effort, effortLocked, mode, model, 
               <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
                 <span />
                 <span aria-live="polite" className="text-center text-sm font-semibold text-contrast">{chosen.efforts ? effortName || "預設" : "—"}</span>
-                <button aria-label="Effort 改回預設" className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || effortLocked || !chosen.efforts} onClick={() => onEffort("")} type="button">
+                <button aria-label="Effort 改回預設" className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || !chosen.efforts} onClick={() => onEffort("")} type="button">
                   <ArrowCounterClockwise className="size-4" />
                 </button>
               </div>
               <button className="-mt-1 mb-1 flex items-center gap-1 justify-self-center rounded-md px-2 text-sm text-ink-muted hover:text-ink" onClick={() => setView("models")} type="button">
                 {modelName}<CaretRight className="size-3" weight="bold" />
               </button>
-              {chosen.efforts ? <EffortPill disabled={effortLocked} effort={effort} levels={chosen.efforts} onEffort={onEffort} /> : <p className="text-center text-xs text-ink-muted">這個模型不支援調整 Effort。</p>}
-              {effortLocked && chosen.efforts ? <p className="text-center text-xs text-ink-muted">這一輪結束後才能改 Effort。</p> : null}
+              {chosen.efforts ? <EffortPill effort={effort} levels={chosen.efforts} onEffort={onEffort} /> : <p className="text-center text-xs text-ink-muted">這個模型不支援調整 Effort。</p>}
             </div>
           )}
         </Popover>
@@ -233,8 +230,8 @@ export function ComposerSettings({ disabled, effort, effortLocked, mode, model, 
         <div className="grid gap-5 pb-2">
           {chosen.efforts ? (
             <div className="grid gap-1">
-              <EffortSlider disabled={effortLocked} effort={effort} levels={chosen.efforts} onEffort={onEffort} />
-              <p className="px-1 text-xs text-ink-muted">{effortLocked ? "這一輪結束後才能改 Effort。" : "Claude Code 已開啟時，改 Effort 會重新啟動它，對話會接續。"}</p>
+              <EffortSlider effort={effort} levels={chosen.efforts} onEffort={onEffort} />
+              <p className="px-1 text-xs text-ink-muted">改了從下一則訊息開始生效。</p>
             </div>
           ) : <p className="px-1 text-sm text-ink-muted">這個模型不支援調整 Effort。</p>}
           <ListGroup label="模型" role="radiogroup">{main.map(row)}</ListGroup>

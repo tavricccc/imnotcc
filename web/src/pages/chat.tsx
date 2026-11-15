@@ -31,7 +31,6 @@ import { isStep, turnRows, type FileChange } from "@/lib/turns";
 import { BUSY_SEND_LABEL, prefs } from "@/lib/prefs";
 import { Meter, UsageRing } from "@/components/usage-ring";
 import { Button } from "@/ui/button";
-import type { ActionStatus } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Dialog } from "@/ui/dialog";
 import { EdgeBlur } from "@/ui/edge-blur";
@@ -103,8 +102,6 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   // What each turn changed, by its prompt, as git counted it on the server.
   const [changes, setChanges] = React.useState<Record<string, FileChange[]>>({});
   const [s, setS] = React.useState<LiveState>({ queued: [], status: firstPrompt ? "running" : "idle", open: false, draft: "", pending: [], mode: "default", model: null, effort: null, context: null, cost: null });
-  const [effortAsk, setEffortAsk] = React.useState<string | null>(null); // effort waiting for a restart to be confirmed
-  const [effortStatus, setEffortStatus] = React.useState<ActionStatus>("idle");
   // What was typed but not sent stays with this session, across leaving it and reloading.
   const draftKey = `imnotcc:composer:${id}`;
   const [text, setText] = React.useState(() => {
@@ -341,13 +338,12 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         case "model": setS((x) => ({ ...x, model: m.model })); break;
         case "effort":
           setS((x) => ({ ...x, effort: m.effort }));
-          setEffortAsk(null); setEffortStatus("idle");
           break;
         case "context": setS((x) => ({ ...x, context: m.context })); break;
         case "cost": setS((x) => ({ ...x, cost: m.cost })); break;
         case "permission": setS((x) => ({ ...x, pending: [...x.pending, m] })); bump(); break;
         case "permission-done": setS((x) => ({ ...x, pending: x.pending.filter((p) => p.id !== m.id) })); break;
-        case "error": setEffortStatus("idle"); addNote(transcript.current, m.message, { error: true }); bump(); break;
+        case "error": addNote(transcript.current, m.message, { error: true }); bump(); break;
         case "closed": setS((x) => ({ ...x, open: false, draft: "" })); break;
         case "queued": setS((x) => ({ ...x, queued: m.queued })); break;
         case "dequeued": {
@@ -575,8 +571,8 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
             </ul>
           ) : null}
           <Composer images={images} input={input} onChange={setText} onImages={setImages} onInterrupt={running ? interrupt : undefined} onKeyDown={onKey} onLongPressSend={running ? () => setAltAsk(true) : undefined} placeholder={running ? `輸入訊息（送出會${BUSY_SEND_LABEL[busySend]}）` : "輸入訊息，或 / 叫出指令"} text={text}>
-            <ComposerSettings disabled={!online} effort={s.effort ?? ""} effortLocked={running || effortStatus !== "idle"} mode={s.mode} model={s.model ?? ""}
-              onEffort={(effort) => { if (effort === (s.effort ?? "")) return; if (s.open) setEffortAsk(effort); else send(id, { t: "effort", effort }); }} onMode={(mode) => send(id, { t: "mode", mode })} onModel={(model) => send(id, { t: "model", model })} />
+            <ComposerSettings disabled={!online} effort={s.effort ?? ""} mode={s.mode} model={s.model ?? ""}
+              onEffort={(effort) => { if (effort !== (s.effort ?? "")) send(id, { t: "effort", effort }); }} onMode={(mode) => send(id, { t: "mode", mode })} onModel={(model) => send(id, { t: "model", model })} />
           </Composer>
         </div>
       </form>
@@ -657,16 +653,6 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         open={altAsk}
         title={`這次改用「${BUSY_SEND_LABEL[otherSend]}」？`}
       />
-      <ConfirmDialog
-        confirmLabel="重新啟動"
-        description="Effort 只能在 Claude Code 啟動時設定。重新啟動後會接續這段對話，下一則訊息就會用新的 Effort。"
-        onConfirm={() => { setEffortStatus("loading"); send(id, { t: "effort", effort: effortAsk ?? "", restart: true }); }}
-        onOpenChange={(o) => { if (!o) setEffortAsk(null); }}
-        open={effortAsk !== null}
-        status={effortStatus}
-        title={`把 Effort 改成 ${effortAsk || "預設"}？`}
-      />
-
       <ConfirmDialog
         confirmLabel="移除"
         description="只是從 imnotcc 的列表拿掉，電腦上的紀錄檔會留著。"

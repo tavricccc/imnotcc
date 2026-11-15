@@ -431,7 +431,7 @@ wss.on('connection', (ws) => {
           await r.setMode(m.mode);
           break;
         case 'model': await r.setModel(m.model); break;
-        case 'effort': await r.setEffort(m.effort, { restart: m.restart === true }); break;
+        case 'effort': await r.setEffort(m.effort); break;
         case 'restart': r.close(); break;
         case 'answer': r.answer(m.id, m); break;
         default: break;
