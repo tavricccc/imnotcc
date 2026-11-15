@@ -22,6 +22,7 @@ import { NewSessionPage } from "@/pages/new-session";
 import type { FirstPrompt } from "@/lib/prompt";
 import { PluginBrowsePage, PluginSourcesPage, PluginsPage } from "@/pages/plugins";
 import { SessionsPage } from "@/pages/sessions";
+import { ContextMenuHost } from "@/ui/context-menu";
 import { CompactPage, GlobalPage, DefaultsPage, FoldersPage, SettingsPage } from "@/pages/settings";
 import { parseRoute, type Screen } from "./routes";
 import { AppShell } from "./shell";
@@ -106,6 +107,7 @@ export function App() {
     <>
       <Titlebar sidebar={desktopSessions ? { collapsed: sessionSidebarCollapsed, toggle: toggleSessions } : undefined} />
       <ClaudeLoginWatcher />
+      <ContextMenuHost />
       <StorageWatcher />
       <AppShell bare={!!sessionId || showDraft} sessions={desktopSessions ? {
         collapsed: sessionSidebarCollapsed,

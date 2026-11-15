@@ -35,6 +35,7 @@ import { Button } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Dialog } from "@/ui/dialog";
 import { EdgeBlur } from "@/ui/edge-blur";
+import { useQuoteTarget } from "@/ui/context-menu";
 import { Input } from "@/ui/field";
 import { ListGroup, ListRow } from "@/ui/list";
 import { ChoiceRow } from "@/ui/list-controls";
@@ -515,6 +516,15 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     } catch { toast.error("無法複製"); }
   }
 
+  // 「引用到輸入框」 from the right-click menu: the selection, as a Markdown quote, after what is typed.
+  useQuoteTarget((quoted) => {
+    const block = quoted.trim().split(/\r?\n/).map((line) => `> ${line}`).join("\n");
+    setText((cur) => `${cur.trimEnd() ? `${cur.trimEnd()}\n\n` : ""}${block}\n\n`);
+    requestAnimationFrame(() => {
+      const el = input.current;
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    });
+  });
   // Shared with the preview panel, which lists them.
   React.useEffect(() => { backgroundTasks.set({ [id]: s.tasks }); }, [id, s.tasks]);
   React.useEffect(() => () => backgroundTasks.set({ [id]: [] }), [id]);
