@@ -36,6 +36,7 @@ import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Dialog } from "@/ui/dialog";
 import { EdgeBlur } from "@/ui/edge-blur";
 import { useQuoteTarget } from "@/ui/context-menu";
+import { RenameDialog } from "@/components/rename-dialog";
 import { Input } from "@/ui/field";
 import { ListGroup, ListRow } from "@/ui/list";
 import { ChoiceRow } from "@/ui/list-controls";
@@ -516,6 +517,15 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     } catch { toast.error("無法複製"); }
   }
 
+  // Renamed from the session list while open here.
+  React.useEffect(() => {
+    const onRenamed = (e: Event) => {
+      const { id: renamed, title: next } = (e as CustomEvent<{ id: string; title: string }>).detail;
+      if (renamed === id) setMeta((m) => (m ? { ...m, title: next } : m));
+    };
+    window.addEventListener("imnotcc:renamed", onRenamed);
+    return () => window.removeEventListener("imnotcc:renamed", onRenamed);
+  }, [id]);
   // 「引用到輸入框」 from the right-click menu: the selection, as a Markdown quote, after what is typed.
   useQuoteTarget((quoted) => {
     const block = quoted.trim().split(/\r?\n/).map((line) => `> ${line}`).join("\n");
@@ -834,31 +844,3 @@ function WindowSheet({ current, onOpenChange, onPick, open }: { current: string 
   );
 }
 
-function RenameDialog({ initial, onOpenChange, onSave, open }: { initial: string; onOpenChange: (o: boolean) => void; onSave: (title: string) => Promise<void>; open: boolean }) {
-  const [value, setValue] = React.useState(initial);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState("");
-  React.useEffect(() => { if (open) { setValue(initial); setError(""); } }, [open, initial]);
-  async function save() {
-    setBusy(true);
-    try { await onSave(value.trim()); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
-  }
-  return (
-    <Dialog
-      actions={
-        <>
-          <Button onClick={() => onOpenChange(false)}>取消</Button>
-          <Button disabled={!value.trim()} onClick={() => void save()} status={busy ? "loading" : "idle"} variant="primary">儲存</Button>
-        </>
-      }
-      onOpenChange={onOpenChange}
-      open={open}
-      title="改名"
-    >
-      <form className="grid gap-2" onSubmit={(e) => { e.preventDefault(); if (value.trim()) void save(); }}>
-        <Input aria-label="新名稱" autoFocus onChange={(e) => setValue(e.target.value)} value={value} />
-        {error ? <p className="message-in px-1 text-sm text-danger" role="alert">{error}</p> : null}
-      </form>
-    </Dialog>
-  );
-}
