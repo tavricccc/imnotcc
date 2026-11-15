@@ -96,6 +96,9 @@ class Runner {
     this.unsent = ''; // streamed text not yet sent to the pages
     // Background work Claude Code reports as live (shells, agents, monitors), as it last listed it.
     this.tasks = [];
+    this.rawTasks = []; // the same, as Claude Code listed it
+    this.taskInfo = new Map(); // task id -> { command, startedAt }
+    this.toolInputs = new Map(); // recent tool_use id -> what it ran, to name a task's command
     this.deltaTimer = null;
     this.turn = null; // { uuid, before: snapshot | null } while a turn that started with that prompt runs
     // Prompts sent as "queue" while a turn ran: each goes out as its own turn once the one before
@@ -191,6 +194,7 @@ class Runner {
       },
     });
     this.q = q;
+    this.rawTasks = [];
     this.setTasks([]); // the list is per process, and a new one starts with none
     this.done = this.consume(q);
   }
@@ -201,7 +205,7 @@ class Runner {
     } catch (e) {
       emit(this.id, { kind: 'error', message: String(e?.message ?? e) });
     } finally {
-      if (this.q === q) { this.q = null; this.setTasks([]); }
+      if (this.q === q) { this.q = null; this.rawTasks = []; this.setTasks([]); }
       this.denyAllPending('The session was closed.');
       this.turn = null;
       this.draft = '';
@@ -223,10 +227,23 @@ class Runner {
     }
     if (m.type === 'system' && m.subtype === 'background_tasks_changed') {
       // Replaces the list; tasks Claude Code marks ambient are watchers, not work to show.
-      this.setTasks((m.tasks ?? []).filter((t) => !t.ambient).map((t) => ({
-        id: t.task_id, type: t.task_type, agent: t.subagent_type ?? null, description: t.description,
-      })));
+      this.rawTasks = (m.tasks ?? []).filter((t) => !t.ambient);
+      this.showTasks();
       return;
+    }
+    if (m.type === 'system' && m.subtype === 'task_started') {
+      // Often after the task joined the list: what it runs comes from the tool call that made it.
+      const info = this.infoFor(m.task_id);
+      info.command ??= this.toolInputs.get(m.tool_use_id) ?? m.prompt ?? null;
+      this.showTasks();
+    }
+    if (m.type === 'assistant') {
+      for (const c of m.message?.content ?? []) {
+        if (c.type !== 'tool_use') continue;
+        const ran = c.input?.command ?? c.input?.prompt ?? null;
+        if (typeof ran === 'string') this.toolInputs.set(c.id, ran);
+      }
+      while (this.toolInputs.size > 200) this.toolInputs.delete(this.toolInputs.keys().next().value);
     }
     if (m.type === 'system' && m.subtype === 'init') {
       this.controls().then((c) => { if (c) { cachedControls = c; emit(null, { kind: 'controls', controls: c }); } })
@@ -266,6 +283,22 @@ class Runner {
       store.save();
       emit(this.id, { kind: 'changes', uuid: turn.uuid, files });
     })().catch((e) => console.error('[imnotcc] changes:', e.message));
+  }
+
+  infoFor(id) {
+    let info = this.taskInfo.get(id);
+    if (!info) { info = { command: null, startedAt: Date.now() }; this.taskInfo.set(id, info); }
+    return info;
+  }
+
+  showTasks() {
+    const live = new Set(this.rawTasks.map((t) => t.task_id));
+    // task_started can come before the task joins the list, so only old leftovers are dropped.
+    for (const [id, info] of this.taskInfo) if (!live.has(id) && Date.now() - info.startedAt > 60_000) this.taskInfo.delete(id);
+    this.setTasks(this.rawTasks.map((t) => {
+      const info = this.infoFor(t.task_id);
+      return { id: t.task_id, type: t.task_type, agent: t.subagent_type ?? null, description: t.description, command: info.command, startedAt: info.startedAt };
+    }));
   }
 
   setTasks(tasks) {
