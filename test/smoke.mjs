@@ -123,6 +123,7 @@ try {
   await wait((e) => e.kind === 'mode');
   const turn1 = crypto.randomUUID();
   sendWs({ t: 'send', uuid: turn1, text: 'Use Bash to run: echo hi > a.txt . Then reply only DONE.' });
+  check('prompt broadcast to the session', (await wait((e) => e.kind === 'prompt' && e.uuid === turn1)).text.includes('a.txt'));
   const r1 = await wait(isResult);
   check('bypass turn', r1.msg.subtype === 'success' && fs.existsSync(path.join(local, 'a.txt')));
   const changed = await wait((e) => e.kind === 'changes' && e.uuid === turn1, 60_000).catch(() => null);

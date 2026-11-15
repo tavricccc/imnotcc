@@ -287,7 +287,13 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     function onSdk(msg: any) {
       transcriptVersion.current++;
       const tr = transcript.current;
-      if (msg.type === "assistant" || msg.type === "user") {
+      if (msg.type === "prompt") {
+        // Sent from this or another device; a prompt already shown here is skipped by its uuid.
+        const images = (msg.images ?? []).map((i: { data: string; mediaType: string }) => ({ ...i, url: `data:${i.mediaType};base64,${i.data}` }));
+        addPrompt(tr, msg.uuid, msg.text ?? "", images);
+        queueArchive();
+        bump();
+      } else if (msg.type === "assistant" || msg.type === "user") {
         if (msg.type === "assistant" && msg.parent_tool_use_id === null) setS((x) => ({ ...x, draft: "" }));
         const before = tr.items.length;
         addMessage(tr, msg.timestamp ? msg : { ...msg, timestamp: new Date().toISOString() }, { subagent: msg.parent_tool_use_id != null });
@@ -328,6 +334,12 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
           if (initialMessages) initialMessages.push(m.msg);
           else onSdk(m.msg);
           break;
+        case "prompt": {
+          const msg = { ...m, type: "prompt" };
+          if (initialMessages) initialMessages.push(msg);
+          else onSdk(msg);
+          break;
+        }
         case "changes":
           setChanges((c) => ({ ...c, [m.uuid]: m.files }));
           // Files the turn made or changed: check paths again, and reload what the panel shows.

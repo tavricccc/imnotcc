@@ -269,6 +269,8 @@ class Runner {
       turn.before = await changes.snapshot(this.meta.cwd);
     }
     this.queue.push({ type: 'user', ...(uuid ? { uuid } : {}), message: { role: 'user', content }, parent_tool_use_id: null });
+    // Every device on this session shows the prompt now, not only the one that sent it.
+    if (uuid) emit(this.id, { kind: 'prompt', uuid, text, images: images.map(({ data, mediaType }) => ({ data, mediaType })) });
     this.setStatus('running');
     this.wake?.();
   }
