@@ -3,11 +3,12 @@ import { Popover as PopoverPrimitive, Tooltip as TooltipPrimitive } from "radix-
 import { cn } from "@/lib/utils";
 
 /** A small panel anchored to its trigger, such as a search field behind a button. */
-export function Popover({ children, className, onOpenChange, open, trigger }: {
+export function Popover({ children, className, onOpenChange, open, side, trigger }: {
   children: React.ReactNode;
   className?: string;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
+  side?: "top" | "bottom";
   trigger: React.ReactNode;
 }) {
   return (
@@ -18,6 +19,7 @@ export function Popover({ children, className, onOpenChange, open, trigger }: {
           align="end"
           className={cn("float-surface z-50 w-[min(22rem,calc(100vw-2rem))] rounded-panel border border-line bg-surface-solid p-4 text-ink shadow-float outline-none", className)}
           collisionPadding={16}
+          side={side}
           sideOffset={8}
         >
           {children}

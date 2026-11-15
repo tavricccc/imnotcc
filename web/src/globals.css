@@ -135,3 +135,14 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 @keyframes effort-pop { 0% { transform: scale(0.85); opacity: 0.4; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
 .effort-pop { animation: effort-pop 240ms ease-out; display: inline-block; }
 @media (prefers-reduced-motion: reduce) { .effort-pop { animation: none; } .effort-range::-webkit-slider-thumb { transition: none; } }
+
+/* Desktop effort pill: the input only supplies the big white thumb; the track and dots are drawn behind it. */
+.effort-pill { -webkit-appearance: none; appearance: none; width: 100%; height: 100%; margin: 0; background: transparent; cursor: pointer; }
+.effort-pill:disabled { cursor: not-allowed; opacity: 0.5; }
+.effort-pill::-webkit-slider-runnable-track { height: 100%; background: transparent; }
+.effort-pill::-moz-range-track { background: transparent; }
+.effort-pill::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 36px; height: 36px; border-radius: 999px; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 25%); transition: transform 140ms ease; }
+.effort-pill::-moz-range-thumb { width: 36px; height: 36px; border: 0; border-radius: 999px; background: #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 25%); }
+.effort-pill:active::-webkit-slider-thumb { transform: scale(1.06); }
+.effort-pill:focus-visible { outline: none; }
+.effort-pill:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--focus-ring, rgb(220 58 28 / 35%)); }
