@@ -455,7 +455,7 @@ fn install(app: &AppHandle, log_path: &Path, force: bool) -> Result<(), String> 
         let mut c = state.config.lock().unwrap();
         c.local = true;
         c.url = Some(format!("http://127.0.0.1:{}", c.port));
-        c.installed_version = Some(app.package_info().version.to_string());
+        c.installed_version = Some(crate::build_stamp(app));
         c.clone()
     };
     save_config(app, &c)?;
@@ -527,7 +527,7 @@ pub fn update_and_open(app: &AppHandle, show: bool) {
                 let mut c = state.config.lock().unwrap();
                 c.local = true;
                 c.url = Some(format!("http://127.0.0.1:{}", c.port));
-                c.installed_version = Some(app.package_info().version.to_string());
+                c.installed_version = Some(crate::build_stamp(&app));
                 c.clone()
             };
             save_config(&app, &c)

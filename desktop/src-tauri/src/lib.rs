@@ -35,7 +35,7 @@ pub struct Config {
     /// This PC runs the server.
     #[serde(default)]
     pub local: bool,
-    /// App version whose server files are installed locally.
+    /// Build (see `build_stamp`) whose server files are installed locally.
     #[serde(default)]
     pub installed_version: Option<String>,
     /// Port the local server listens on; change it in config.json if 4280 is taken.
@@ -98,8 +98,20 @@ pub fn save_config(app: &AppHandle, c: &Config) -> Result<(), String> {
     fs::write(config_path(app), s).map_err(|e| format!("寫入設定失敗：{e}"))
 }
 
+/// This build: the version plus the exe's modified time, so reinstalling a rebuilt app with the
+/// same version number still refreshes the local server files.
+pub fn build_stamp(app: &AppHandle) -> String {
+    let version = app.package_info().version.to_string();
+    let built = std::env::current_exe().ok()
+        .and_then(|p| fs::metadata(p).ok())
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs());
+    match built { Some(t) => format!("{version}+{t}"), None => version }
+}
+
 pub fn needs_update(app: &AppHandle, c: &Config) -> bool {
-    c.local && (c.installed_version.as_deref() != Some(&app.package_info().version.to_string()) || !local::server_files_present(app))
+    c.local && (c.installed_version.as_deref() != Some(build_stamp(app).as_str()) || !local::server_files_present(app))
 }
 
 /// Who is calling a desktop command.
