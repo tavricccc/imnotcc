@@ -8,7 +8,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Duration;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::window::{Effect, EffectsBuilder};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
@@ -48,11 +48,49 @@ pub struct Config {
     /// Last remote server URL configured by the user, kept when switching between local and remote.
     #[serde(default)]
     pub remote_url: Option<String>,
+    /// Remote servers connected to before, to switch between from the tray or App settings.
+    #[serde(default)]
+    pub remotes: Vec<Remote>,
+}
+
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+pub struct Remote {
+    pub url: String,
+    /// A name the user gave it; the host name is shown otherwise.
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+impl Remote {
+    pub fn label(&self) -> String {
+        if let Some(n) = self.name.as_deref().filter(|n| !n.trim().is_empty()) {
+            return n.trim().to_string();
+        }
+        self.url.parse::<tauri::Url>().ok()
+            .and_then(|u| u.host_str().map(|h| match u.port() { Some(p) => format!("{h}:{p}"), None => h.to_string() }))
+            .unwrap_or_else(|| self.url.clone())
+    }
+}
+
+impl Config {
+    /// Adds `url` to the saved servers if it is not there yet.
+    pub fn remember_remote(&mut self, url: &str) {
+        if !self.remotes.iter().any(|r| r.url == url) {
+            self.remotes.push(Remote { url: url.to_string(), name: None });
+        }
+    }
+    /// Servers saved before the list existed join it.
+    fn migrate_remotes(&mut self) {
+        let mut seen = Vec::new();
+        if let Some(u) = self.remote_url.clone() { seen.push(u); }
+        if let (false, Some(u)) = (self.local, self.url.clone()) { seen.push(u); }
+        for u in seen { self.remember_remote(&u); }
+    }
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { url: None, local: false, installed_version: None, port: default_port(), origins: Vec::new(), remote_url: None }
+        Config { url: None, local: false, installed_version: None, port: default_port(), origins: Vec::new(), remote_url: None, remotes: Vec::new() }
     }
 }
 
@@ -84,6 +122,7 @@ fn load_config(app: &AppHandle) -> Config {
             if c.local && c.url.is_none() {
                 c.url = Some(format!("http://127.0.0.1:{}", c.port));
             }
+            c.migrate_remotes();
             c
         }
         Err(e) => {
@@ -400,16 +439,110 @@ async fn use_remote(app: AppHandle, window: WebviewWindow, url: String) -> Resul
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("網址要以 http:// 或 https:// 開頭".into());
     }
-    confirm(&app, who, format!("要把 imnotcc 改連到這個 server 嗎？\n\n{url}\n\n本機 server 會停止。不是你自己按的話請按「取消」。")).await?;
+    // Moving between servers already saved, away from a remote one, needs no question: nothing
+    // stops and the user chose those servers before. A new address, or leaving the local server
+    // (which phones may be using), is asked about.
+    let (known, was_local) = {
+        let state = app.state::<AppState>();
+        let c = state.config.lock().unwrap();
+        (c.remotes.iter().any(|r| r.url == url), c.local)
+    };
+    if !known || was_local {
+        let stop = if was_local { "\n\n本機 server 會停止。" } else { "" };
+        confirm(&app, who, format!("要把 imnotcc 改連到這個 server 嗎？\n\n{url}{stop}\n\n不是你自己按的話請按「取消」。")).await?;
+    }
+    switch_to_remote(app, url).await
+}
+
+/// Checks `url` is a server, then points the window at it and remembers it.
+async fn switch_to_remote(app: AppHandle, url: String) -> Result<(), String> {
     let u = url.clone();
     tauri::async_runtime::spawn_blocking(move || probe(&u)).await.map_err(|e| e.to_string())??;
     let state = app.state::<AppState>();
     if state.config.lock().unwrap().local {
         state.server.stop();
     }
-    let c = { let mut c = state.config.lock().unwrap(); c.url = Some(url.clone()); c.remote_url = Some(url.clone()); c.local = false; c.clone() };
+    let c = {
+        let mut c = state.config.lock().unwrap();
+        c.url = Some(url.clone());
+        c.remote_url = Some(url.clone());
+        c.local = false;
+        c.remember_remote(&url);
+        c.clone()
+    };
     save_config(&app, &c)?;
+    refresh_tray(&app);
     open_window(&app, Some(url), true)
+}
+
+/// Switches back to the server on this PC, when it is installed and up to date.
+fn switch_to_local(app: &AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let cfg = state.config.lock().unwrap().clone();
+    if cfg.local {
+        return open_window(app, Some(local_url(app)), true);
+    }
+    if cfg.installed_version.is_none() || !local::server_files_present(app) {
+        return Err("這台電腦還沒有安裝本機 server，請到設定頁安裝。".into());
+    }
+    let next = Config { local: true, url: Some(local_url(app)), ..cfg };
+    if needs_update(app, &next) {
+        return Err("本機 server 需要先更新，請到設定頁完成。".into());
+    }
+    *state.config.lock().unwrap() = next.clone();
+    save_config(app, &next)?;
+    refresh_tray(app);
+    local::start_and_open(app, true);
+    Ok(())
+}
+
+#[tauri::command]
+async fn use_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let who = caller(&app, &window)?;
+    confirm(&app, who, "要改用這台電腦上的本機 server 嗎？\n\n不是你自己按的話請按「取消」。".into()).await?;
+    switch_to_local(&app)
+}
+
+/// Drops a saved server from the list. The one in use stays.
+#[tauri::command]
+async fn forget_remote(app: AppHandle, window: WebviewWindow, url: String) -> Result<Config, String> {
+    let who = caller(&app, &window)?;
+    {
+        let state = app.state::<AppState>();
+        let c = state.config.lock().unwrap();
+        if !c.local && c.url.as_deref() == Some(url.as_str()) {
+            return Err("不能移除正在使用的 server，請先切換到別台。".into());
+        }
+    }
+    confirm(&app, who, format!("要從清單移除這個 server 嗎？\n\n{url}")).await?;
+    let c = {
+        let state = app.state::<AppState>();
+        let mut c = state.config.lock().unwrap();
+        c.remotes.retain(|r| r.url != url);
+        if c.remote_url.as_deref() == Some(url.as_str()) {
+            c.remote_url = c.remotes.last().map(|r| r.url.clone());
+        }
+        c.clone()
+    };
+    save_config(&app, &c)?;
+    refresh_tray(&app);
+    Ok(c)
+}
+
+#[tauri::command]
+fn rename_remote(app: AppHandle, window: WebviewWindow, url: String, name: String) -> Result<Config, String> {
+    caller(&app, &window)?;
+    let name = name.trim().chars().take(60).collect::<String>();
+    let c = {
+        let state = app.state::<AppState>();
+        let mut c = state.config.lock().unwrap();
+        let r = c.remotes.iter_mut().find(|r| r.url == url).ok_or("清單裡沒有這個 server。")?;
+        r.name = if name.is_empty() { None } else { Some(name) };
+        c.clone()
+    };
+    save_config(&app, &c)?;
+    refresh_tray(&app);
+    Ok(c)
 }
 
 #[tauri::command]
@@ -684,15 +817,65 @@ fn open_setup(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     open_window(&app, None, true)
 }
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+/// The tray menu: open, a submenu of servers to switch to, restart, quit.
+fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let cfg = app.state::<AppState>().config.lock().unwrap().clone();
     let open = MenuItem::with_id(app, "open", "開啟視窗", true, None::<&str>)?;
+    let hosts = Submenu::with_id(app, "hosts", "切換 Server", true)?;
+    if cfg.installed_version.is_some() {
+        hosts.append(&CheckMenuItem::with_id(app, "host:local", "本機 Server", true, cfg.local, None::<&str>)?)?;
+    }
+    for (i, r) in cfg.remotes.iter().enumerate() {
+        let current = !cfg.local && cfg.url.as_deref() == Some(r.url.as_str());
+        hosts.append(&CheckMenuItem::with_id(app, format!("host:{i}"), r.label(), true, current, None::<&str>)?)?;
+    }
+    hosts.append(&PredefinedMenuItem::separator(app)?)?;
+    hosts.append(&MenuItem::with_id(app, "host:setup", "新增 Server…", true, None::<&str>)?)?;
     // Kept here as well as in App settings: when the server is down, that page cannot load.
     let restart = MenuItem::with_id(app, "restart", "重新啟動本機 server", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", "結束", true, None::<&str>)?;
     let sep = PredefinedMenuItem::separator(app)?;
     let sep2 = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &sep, &restart, &sep2, &quit])?;
+    Menu::with_items(app, &[&open, &hosts, &sep, &restart, &sep2, &quit])
+}
 
+/// Rebuilds the tray menu after the servers or the current one changed.
+pub fn refresh_tray(app: &AppHandle) {
+    let Some(tray) = app.tray_by_id("main") else { return };
+    match tray_menu(app) {
+        Ok(menu) => { let _ = tray.set_menu(Some(menu)); }
+        Err(e) => eprintln!("[imnotcc] could not rebuild the tray menu: {e}"),
+    }
+}
+
+fn tray_error(app: &AppHandle, message: String) {
+    app.dialog().message(message).title("imnotcc").show(|_| {});
+}
+
+/// A server picked in the tray. The click is the user's own, so nothing is asked.
+fn tray_switch(app: &AppHandle, id: &str) {
+    match id {
+        "host:setup" => { let _ = open_window(app, None, true); }
+        "host:local" => {
+            if let Err(e) = switch_to_local(app) { tray_error(app, e); }
+            // A check mark the click toggled is put back when nothing changed.
+            refresh_tray(app);
+        }
+        _ => {
+            let url = id.strip_prefix("host:").and_then(|i| i.parse::<usize>().ok())
+                .and_then(|i| app.state::<AppState>().config.lock().unwrap().remotes.get(i).map(|r| r.url.clone()));
+            let Some(url) = url else { return };
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = switch_to_remote(app.clone(), url).await { tray_error(&app, e); }
+                refresh_tray(&app);
+            });
+        }
+    }
+}
+
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = tray_menu(app)?;
     TrayIconBuilder::with_id("main")
         .icon(app.default_window_icon().unwrap().clone())
         .tooltip("imnotcc")
@@ -705,6 +888,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         })
         .on_menu_event(move |app, e| match e.id.as_ref() {
             "open" => show_window(app),
+            id if id.starts_with("host:") => tray_switch(app, id),
             "restart" => {
                 let st = app.state::<AppState>();
                 if st.config.lock().unwrap().local {
@@ -712,7 +896,7 @@ fn build_tray(app: &AppHandle) -> tauri::Result<()> {
                     // Stopping waits on the old process; the tray handler runs on the main thread.
                     std::thread::spawn(move || app.state::<AppState>().server.restart(&app));
                 } else {
-                    app.dialog().message("這台電腦沒有設成 server。").title("imnotcc").show(|_| {});
+                    tray_error(app, "這台電腦沒有設成 server。".into());
                 }
             }
             "quit" => {
@@ -761,6 +945,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_state,
             use_remote,
+            use_local,
+            forget_remote,
+            rename_remote,
             install_local,
             update_sdk,
             resume_current,
@@ -823,5 +1010,35 @@ mod tests {
         assert_eq!(cfg.origins, vec!["https://cc.example.com"]);
         assert!(!cfg.local);
         assert_eq!(cfg.url, None);
+        assert!(cfg.remotes.is_empty());
+    }
+
+    #[test]
+    fn old_remote_settings_join_the_list() {
+        let raw = r#"{"url": "https://a.example.com", "remote_url": "https://b.example.com"}"#;
+        let mut cfg: Config = serde_json::from_str(raw).unwrap();
+        cfg.migrate_remotes();
+        let urls: Vec<_> = cfg.remotes.iter().map(|r| r.url.as_str()).collect();
+        assert_eq!(urls, vec!["https://b.example.com", "https://a.example.com"]);
+        cfg.migrate_remotes();
+        assert_eq!(cfg.remotes.len(), 2, "migrating twice adds nothing");
+    }
+
+    #[test]
+    fn local_url_is_not_a_remote() {
+        let raw = r#"{"url": "http://127.0.0.1:4280", "local": true}"#;
+        let mut cfg: Config = serde_json::from_str(raw).unwrap();
+        cfg.migrate_remotes();
+        assert!(cfg.remotes.is_empty());
+    }
+
+    #[test]
+    fn remote_label() {
+        let r = Remote { url: "https://cc.example.com".into(), name: None };
+        assert_eq!(r.label(), "cc.example.com");
+        let r = Remote { url: "http://192.168.1.5:4280".into(), name: Some("  書房  ".into()) };
+        assert_eq!(r.label(), "書房");
+        let r = Remote { url: "http://192.168.1.5:4280".into(), name: None };
+        assert_eq!(r.label(), "192.168.1.5:4280");
     }
 }

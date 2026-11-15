@@ -4,6 +4,9 @@ fn main() {
             tauri_build::AppManifest::new().commands(&[
                 "get_state",
                 "use_remote",
+                "use_local",
+                "forget_remote",
+                "rename_remote",
                 "install_local",
                 "update_sdk",
                 "resume_current",

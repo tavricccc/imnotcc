@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-forget-remote"
+description = "Enables the forget_remote command without any pre-configured scope."
+commands.allow = ["forget_remote"]
+
+[[permission]]
+identifier = "deny-forget-remote"
+description = "Denies the forget_remote command without any pre-configured scope."
+commands.deny = ["forget_remote"]

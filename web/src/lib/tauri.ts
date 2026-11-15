@@ -7,6 +7,16 @@ export interface DesktopConfig {
   port: number;
   origins: string[];
   remote_url?: string | null;
+  /** Servers connected to before; older desktop builds leave it out. */
+  remotes?: DesktopRemote[];
+}
+
+export interface DesktopRemote { url: string; name?: string | null }
+
+/** A saved server's name: the one given, or its host. */
+export function remoteLabel(r: DesktopRemote) {
+  if (r.name?.trim()) return r.name.trim();
+  try { return new URL(r.url).host; } catch { return r.url; }
 }
 
 export interface DesktopState {

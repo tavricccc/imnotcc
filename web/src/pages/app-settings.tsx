@@ -1,6 +1,6 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { ArrowsClockwise, Desktop, FolderOpen, Globe, Key, Laptop, Link, Package, SignOut, Trash } from "@phosphor-icons/react/ssr";
+import { ArrowsClockwise, Check, Desktop, DotsThree, FolderOpen, Globe, Key, Laptop, Link, Package, SignOut, Trash } from "@phosphor-icons/react/ssr";
 import { auth, get, post } from "@/lib/api";
 import { claudeAuth, refreshClaudeAuth, TARGET_LABEL, type ClaudeTarget } from "@/lib/claude-auth";
 import { ClaudeLoginSheet } from "@/components/claude-login";
@@ -10,7 +10,7 @@ import { prefs, SESSION_LIMITS } from "@/lib/prefs";
 import { disablePush, enablePush, push, refreshPush, testPush, type PushState } from "@/lib/push";
 import { readSessions } from "@/lib/resources";
 import { useStore } from "@/lib/store-core";
-import { isTauri, tauriInvoke, tauriListen, type DesktopState } from "@/lib/tauri";
+import { isTauri, remoteLabel, tauriInvoke, tauriListen, type DesktopConfig, type DesktopRemote, type DesktopState } from "@/lib/tauri";
 import { Button } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Field, Input, Textarea } from "@/ui/field";
@@ -280,6 +280,74 @@ function AgentSdkSettings({
   );
 }
 
+/**
+ * The servers this app has connected to, to switch between (also in the tray menu). Switching
+ * opens the other server in this window, so this page goes away with it.
+ */
+function ServerList({ onChanged, st }: { onChanged: (config: DesktopConfig) => void; st: DesktopState }) {
+  const remotes = st.config.remotes ?? [];
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<DesktopRemote | null>(null);
+  const [name, setName] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const hasLocal = !!st.config.installed_version;
+  if (!remotes.length && !hasLocal) return null;
+  const isCurrent = (url: string) => !st.config.local && st.config.url === url;
+
+  const switchTo = async (key: string, run: () => Promise<unknown>) => {
+    setBusy(key);
+    try { await run(); } catch (e) { if (String(e) !== "已取消") toast.error(String(e)); } finally { setBusy(null); }
+  };
+  const saveName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    try { onChanged(await tauriInvoke<DesktopConfig>("rename_remote", { url: editing.url, name })); setEditing(null); }
+    catch (err) { toast.error(String(err)); } finally { setSaving(false); }
+  };
+  const forget = async () => {
+    if (!editing) return;
+    setSaving(true);
+    try { onChanged(await tauriInvoke<DesktopConfig>("forget_remote", { url: editing.url })); setEditing(null); toast.success("已從清單移除"); }
+    catch (err) { if (String(err) !== "已取消") toast.error(String(err)); } finally { setSaving(false); }
+  };
+  const current = <span className="flex shrink-0 items-center gap-1 text-[0.8125rem] text-accent-ink"><Check weight="bold" />使用中</span>;
+  const switchButton = (key: string, run: () => Promise<unknown>) => (
+    <Button onClick={() => void switchTo(key, run)} size="sm" status={busy === key ? "loading" : "idle"} variant="secondary">切換</Button>
+  );
+
+  return (
+    <>
+      <ListGroup footer="系統匣圖示的選單裡也能切換。" title="Server 清單">
+        {hasLocal ? (
+          <ListRow detail={st.local_url} icon={<Desktop />} label="本機 Server"
+            trailing={st.config.local ? current : switchButton("local", () => tauriInvoke("use_local"))} />
+        ) : null}
+        {remotes.map((r) => (
+          <ListRow detail={r.url} icon={<Globe />} key={r.url} label={remoteLabel(r)}
+            trailing={(
+              <span className="flex shrink-0 items-center gap-1">
+                {isCurrent(r.url) ? current : switchButton(r.url, () => tauriInvoke("use_remote", { url: r.url }))}
+                <Button aria-label={`管理 ${remoteLabel(r)}`} onClick={() => { setEditing(r); setName(r.name ?? ""); }} size="icon-sm" title="改名或移除" variant="ghost"><DotsThree weight="bold" /></Button>
+              </span>
+            )} />
+        ))}
+      </ListGroup>
+      <Sheet description={editing?.url} onOpenChange={(o) => { if (!o) setEditing(null); }} open={!!editing} title={editing ? remoteLabel(editing) : ""}>
+        <form className="grid gap-4 pb-2" onSubmit={saveName}>
+          <Field hint="留白就顯示網址的主機名稱" label="名稱">
+            {({ describedBy, id }) => <Input aria-describedby={describedBy} id={id} maxLength={60} onChange={(e) => setName(e.target.value)} placeholder={editing ? remoteLabel({ url: editing.url }) : ""} value={name} />}
+          </Field>
+          <Button size="lg" status={saving ? "loading" : "idle"} type="submit" variant="primary">儲存</Button>
+          {editing && !isCurrent(editing.url) ? (
+            <Button disabled={saving} onClick={() => void forget()} size="lg" type="button" variant="ghost"><Trash />從清單移除</Button>
+          ) : null}
+        </form>
+      </Sheet>
+    </>
+  );
+}
+
 function DesktopSettings({
   onLocalChange,
   onSdkUpdated,
@@ -467,6 +535,8 @@ function DesktopSettings({
           />
         ) : null}
       </ListGroup>
+
+      <ServerList onChanged={(config) => setSt((prev) => prev ? { ...prev, config } : prev)} st={st} />
 
       {st.config.local ? (
         <ListGroup footer="僅在作為本機 Server（Host）時顯示，其他裝置的 PWA 不會看到。" title="本機 Server（Host）">

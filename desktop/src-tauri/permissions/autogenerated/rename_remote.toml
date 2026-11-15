@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-rename-remote"
+description = "Enables the rename_remote command without any pre-configured scope."
+commands.allow = ["rename_remote"]
+
+[[permission]]
+identifier = "deny-rename-remote"
+description = "Denies the rename_remote command without any pre-configured scope."
+commands.deny = ["rename_remote"]
