@@ -1,6 +1,12 @@
 import * as React from "react";
-import { ArrowUp, FolderSimple, FolderSimplePlus, GearSix, HardDrives, LinuxLogo, NotePencil, Plus, SidebarSimple, WindowsLogo } from "@phosphor-icons/react/ssr";
-import { get, post } from "@/lib/api";
+import { ArrowRight, ArrowUp, Copy, FolderSimple, PencilSimple, Trash, FolderSimplePlus, GearSix, HardDrives, LinuxLogo, NotePencil, Plus, SidebarSimple, WindowsLogo } from "@phosphor-icons/react/ssr";
+import { toast } from "sonner";
+import { del, get, post } from "@/lib/api";
+import { clearCache } from "@/lib/cache";
+import { removeLocalTranscript } from "@/lib/local-transcript";
+import { RenameDialog } from "@/components/rename-dialog";
+import { ConfirmDialog } from "@/ui/confirm-dialog";
+import { useContextItems, type ContextItem } from "@/ui/context-menu";
 import { isTauri } from "@/lib/tauri";
 import { navigate } from "@/lib/app-navigation";
 import { ago, baseName, until } from "@/lib/format";
@@ -55,6 +61,78 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
   }));
   const visibleRecent = recent.filter((s) => envOf(s.cwd) === env);
   const [usageOpen, setUsageOpen] = React.useState(false);
+
+  // ---- What can be done to one conversation: right-click it, or long-press it on a phone ----
+  const root = React.useRef<HTMLDivElement>(null);
+  const [acting, setActing] = React.useState<{ row: SessionRow; what: "menu" | "rename" | "remove" } | null>(null);
+  const [actingOpen, setActingOpen] = React.useState(false);
+  const rows = React.useMemo(() => new Map([...(groups ?? []).flatMap((g) => g.sessions), ...recent].map((r) => [r.id, r])), [groups, recent]);
+  const rowAt = React.useRef((_: EventTarget | null): SessionRow | undefined => undefined);
+  rowAt.current = (target) => {
+    const link = target instanceof Element ? target.closest<HTMLAnchorElement>('a[href^="#/s/"]') : null;
+    return link ? rows.get(link.getAttribute("href")!.slice(4)) : undefined;
+  };
+  const act = (row: SessionRow, what: "menu" | "rename" | "remove") => { setActing({ row, what }); setActingOpen(true); };
+  const rowActions = (row: SessionRow): ContextItem[] => [
+    { key: "open", label: "開啟", icon: ArrowRight, onSelect: () => navigate(`/s/${row.id}`) },
+    { key: "rename", label: "重新命名", icon: PencilSimple, onSelect: () => act(row, "rename") },
+    { key: "copy-id", label: "複製 ID", icon: Copy, onSelect: () => { void navigator.clipboard.writeText(row.id).then(() => toast.success("已複製 ID"), () => {}); } },
+    { key: "remove", label: "移除", icon: Trash, tone: "danger", onSelect: () => act(row, "remove") },
+  ];
+  useContextItems(root, (target) => { const row = rowAt.current(target); return row ? rowActions(row) : null; });
+  React.useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    let timer = 0;
+    let start: { x: number; y: number } | null = null;
+    let fired = false;
+    const cancel = () => { window.clearTimeout(timer); start = null; };
+    const down = (e: PointerEvent) => {
+      fired = false;
+      if (e.pointerType !== "touch") return;
+      const row = rowAt.current(e.target);
+      if (!row) return;
+      start = { x: e.clientX, y: e.clientY };
+      timer = window.setTimeout(() => { fired = true; start = null; navigator.vibrate?.(10); act(row, "menu"); }, 500);
+    };
+    const move = (e: PointerEvent) => { if (start && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 8) cancel(); };
+    // The press that opened the sheet does not also open the conversation.
+    const click = (e: MouseEvent) => { if (fired) { fired = false; e.preventDefault(); e.stopPropagation(); } };
+    // Nor the phone's own link menu.
+    const menu = (e: Event) => { if (fired || start) e.preventDefault(); };
+    el.addEventListener("pointerdown", down);
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", cancel);
+    el.addEventListener("pointercancel", cancel);
+    el.addEventListener("click", click, true);
+    el.addEventListener("contextmenu", menu);
+    return () => {
+      cancel();
+      el.removeEventListener("pointerdown", down);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", cancel);
+      el.removeEventListener("pointercancel", cancel);
+      el.removeEventListener("click", click, true);
+      el.removeEventListener("contextmenu", menu);
+    };
+  }, []);
+  async function rename(row: SessionRow, title: string) {
+    await post(`/api/sessions/${row.id}/rename`, { title });
+    clearCache(`/api/sessions/${row.id}`);
+    // An open chat of this conversation shows the new name too.
+    window.dispatchEvent(new CustomEvent("imnotcc:renamed", { detail: { id: row.id, title } }));
+    setActingOpen(false);
+    void load();
+  }
+  async function remove(row: SessionRow) {
+    try {
+      await del(`/api/sessions/${row.id}`);
+      void removeLocalTranscript(row.id).catch(() => {});
+      clearCache(`/api/sessions/${row.id}`);
+      if (row.id === activeId) navigate("/", { replace: true });
+      void load();
+    } catch (e) { toast.error((e as Error).message); }
+  }
   const [usageStatus, setUsageStatus] = React.useState<"idle" | "loading" | "error">("idle");
 
   React.useEffect(() => {
@@ -124,7 +202,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
   );
 
   return (
-    <div className={sidebar ? "flex h-full min-h-0 flex-col" : "grid grid-cols-[minmax(0,1fr)] gap-6"}>
+    <div className={cn(sidebar ? "flex h-full min-h-0 flex-col" : "grid grid-cols-[minmax(0,1fr)] gap-6", "[&_a[href^='#/s/']]:[-webkit-touch-callout:none]")} ref={root}>
       <div className={sidebar ? "grid shrink-0 gap-1 px-2.5 pb-2 pt-[calc(var(--safe-top)+0.5rem)]" : "contents"}>
         {sidebar ? (
           <>
@@ -205,6 +283,29 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
           />
         </footer>
       ) : null}
+
+      <Sheet onOpenChange={setActingOpen} open={actingOpen && acting?.what === "menu"} title={acting ? acting.row.title || (acting.row.temporary ? "Temp Chat" : "新的對話") : ""}>
+        <ListGroup>
+          {acting ? rowActions(acting.row).map(({ icon: ItemIcon, key, label, onSelect, tone }) => (
+            <ListRow icon={<ItemIcon />} key={key} label={label} onClick={() => { if (key !== "rename" && key !== "remove") setActingOpen(false); onSelect(); }} tone={tone} />
+          )) : null}
+        </ListGroup>
+      </Sheet>
+      <RenameDialog
+        initial={acting?.row.title ?? ""}
+        onOpenChange={setActingOpen}
+        onSave={(title) => rename(acting!.row, title)}
+        open={actingOpen && acting?.what === "rename"}
+      />
+      <ConfirmDialog
+        confirmLabel="移除"
+        description="只是從 imnotcc 的列表拿掉，電腦上的紀錄檔會留著。"
+        onConfirm={() => { if (acting) void remove(acting.row); }}
+        onOpenChange={setActingOpen}
+        open={actingOpen && acting?.what === "remove"}
+        title="移除這個對話？"
+        tone="danger"
+      />
 
       <Sheet onOpenChange={setUsageOpen} open={usageOpen} title="方案用量">
         <div className="grid gap-5 pb-2">
