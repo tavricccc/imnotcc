@@ -3,14 +3,15 @@
 //
 // A path is read the way the session reads it: relative ones from the session's folder, "~/"
 // from that environment's home, Linux paths in a WSL session through //wsl.localhost. Any file
-// on this computer can be opened; the login in front of the app is the boundary, the same as for
-// running Claude itself.
+// on this computer can be opened except keys and credentials (sensitive.js); the login in front
+// of the app is the boundary, the same as for running Claude itself.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as wsl from './wsl.js';
 import * as changes from './changes.js';
+import { isSensitive } from './sensitive.js';
 
 const MAX_TEXT_BYTES = 2 * 1024 * 1024;
 const MAX_RAW_BYTES = 50 * 1024 * 1024;
@@ -71,6 +72,8 @@ function inspect(cwd, raw) {
   if (!where) return null;
   try {
     const real = fs.realpathSync(where.host);
+    // Keys and credentials are never opened, whatever path leads to them.
+    if (isSensitive(where.host) || isSensitive(real)) return { ...where, real, blocked: true };
     const stat = fs.statSync(real);
     return { ...where, real, stat, kind: kindOf(real, stat) };
   } catch { return null; }
@@ -99,6 +102,15 @@ function previewLink(file) {
   return `/preview/${token}/${encodeURIComponent(path.basename(file))}`;
 }
 
+const BLOCKED = '這個檔案可能含有金鑰或密碼，不能從這裡開啟。';
+/** The file a request names, or null after answering 404/403 for it. */
+function opened(meta, raw, res, missing = '找不到這個檔案。') {
+  const f = inspect(meta.cwd, raw);
+  if (!f) { res.status(404).json({ error: missing }); return null; }
+  if (f.blocked) { res.status(403).json({ error: BLOCKED }); return null; }
+  return f;
+}
+
 const describe = (f) => ({ path: f.shown, hostPath: f.real, name: path.basename(f.real), kind: f.kind, size: f.stat.size, mtime: f.stat.mtimeMs });
 
 export function fileRoutes(app, { requireSession, wrap }) {
@@ -108,7 +120,7 @@ export function fileRoutes(app, { requireSession, wrap }) {
     const meta = requireSession(req, res);
     if (!meta) return;
     const paths = Array.isArray(req.body?.paths) ? req.body.paths.slice(0, MAX_RESOLVE) : [];
-    res.json({ files: paths.map((p) => { const f = inspect(meta.cwd, p); return f ? describe(f) : null; }) });
+    res.json({ files: paths.map((p) => { const f = inspect(meta.cwd, p); return f && !f.blocked ? describe(f) : null; }) });
   });
 
   // A file's text for the preview panel; files that are not text, or too large, come back with
@@ -116,8 +128,9 @@ export function fileRoutes(app, { requireSession, wrap }) {
   app.get('/api/sessions/:id/file', (req, res) => {
     const meta = requireSession(req, res);
     if (!meta) return;
-    const f = inspect(meta.cwd, req.query.path);
-    if (!f || f.kind === 'dir') return res.status(404).json({ error: '找不到這個檔案。' });
+    const f = opened(meta, req.query.path, res);
+    if (!f) return;
+    if (f.kind === 'dir') return res.status(404).json({ error: '找不到這個檔案。' });
     const info = describe(f);
     if (!['text', 'markdown', 'html'].includes(f.kind)) return res.json(info);
     if (f.stat.size > MAX_TEXT_BYTES) return res.json({ ...info, tooLarge: true });
@@ -128,8 +141,9 @@ export function fileRoutes(app, { requireSession, wrap }) {
   const raw = (req, res) => {
     const meta = requireSession(req, res);
     if (!meta) return;
-    const f = inspect(meta.cwd, req.query.path);
-    if (!f || !f.stat.isFile()) return res.status(404).json({ error: '找不到這個檔案。' });
+    const f = opened(meta, req.query.path, res);
+    if (!f) return;
+    if (!f.stat.isFile()) return res.status(404).json({ error: '找不到這個檔案。' });
     if (f.stat.size > MAX_RAW_BYTES) return res.status(413).json({ error: '檔案太大。' });
     const type = INLINE[path.extname(f.real).toLowerCase()];
     const headers = { 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, no-cache' };
@@ -142,8 +156,8 @@ export function fileRoutes(app, { requireSession, wrap }) {
   app.get('/api/sessions/:id/image', (req, res) => {
     const meta = requireSession(req, res);
     if (!meta) return;
-    const f = inspect(meta.cwd, req.query.path);
-    if (!f) return res.status(404).json({ error: '找不到這張圖片。' });
+    const f = opened(meta, req.query.path, res, '找不到這張圖片。');
+    if (!f) return;
     if (f.kind !== 'image') return res.status(403).json({ error: '不能開這個檔案。' });
     raw(req, res);
   });
@@ -154,7 +168,7 @@ export function fileRoutes(app, { requireSession, wrap }) {
     const meta = requireSession(req, res);
     if (!meta) return;
     const f = inspect(meta.cwd, req.body?.path);
-    if (!f || f.kind !== 'html') return res.status(400).json({ error: '只能這樣開 HTML 檔。' });
+    if (!f || f.blocked || f.kind !== 'html') return res.status(400).json({ error: '只能這樣開 HTML 檔。' });
     res.json({ url: previewLink(f.real) });
   });
 
@@ -167,6 +181,7 @@ export function fileRoutes(app, { requireSession, wrap }) {
     try { real = fs.realpathSync(path.resolve(grant.dir, rel)); } catch { return res.status(404).type('text/plain').send('找不到這個檔案。'); }
     // Only inside the page's folder, symlinks included.
     if (real !== grant.dir && !real.startsWith(grant.dir + path.sep)) return res.status(403).type('text/plain').send('不能開這個資料夾以外的檔案。');
+    if (isSensitive(real)) return res.status(403).type('text/plain').send(BLOCKED);
     if (!fs.statSync(real).isFile()) return res.status(404).type('text/plain').send('找不到這個檔案。');
     res.sendFile(real, { dotfiles: 'allow', headers: PREVIEW_HEADERS });
   });

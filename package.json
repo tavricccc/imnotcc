@@ -18,6 +18,7 @@
     "build": "vite build",
     "start": "node server/index.js",
     "test": "node test/smoke.mjs",
+    "test:files": "node test/files.mjs && node test/files.mjs --no-rg",
     "typecheck": "tsc --noEmit -p ."
   },
   "type": "module",
