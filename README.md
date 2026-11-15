@@ -30,6 +30,9 @@
 - **Sending while Claude works**: queue a message for the next turn or steer the running one; pick the default in settings, long-press send (or Ctrl+Enter) for the other.
 - **Claude sign-in in the app**: when Claude Code is signed out or its login expires, the app walks you through signing in again; no terminal needed.
 - **Plugin management: List, install, uninstall, enable, disable, and add marketplaces via `claude plugin`.
+- **File browser & search**: The folder button in a chat opens the session's folder in the preview panel; browse anywhere on the host and search by file name or text (ripgrep when `rg` is on `PATH` or set in `IMNOTCC_RG`, a plain scan otherwise). Keys and credentials (`~/.ssh`, `~/.aws`, `.env`, `*.pem`, `*.key`, browser profiles, the app's data folder, …) are never listed, previewed, searched or downloaded.
+- **Uploads & downloads**: Attach any file to a message: images go to Claude as before, other files upload (up to 50 MB) into `.imnotcc/uploads/` in the session folder (ignored by git through `.imnotcc/.gitignore`) and the message names their path. Download any file, or a folder as a zip (without `.git` and `node_modules`).
+- **Several servers (desktop app)**: Every server you connect to is kept in a list; switch between them from the tray menu or App settings.
 - **WSL support (Windows)**: Folders starting with `/` run inside WSL (`IMNOTCC_WSL_DISTRO`, default `Ubuntu`).
 - **PWA**: Installable on iOS and Android with offline shell caching.
 
@@ -118,6 +121,7 @@ Start-ScheduledTask -TaskName 'imnotcc'
 | `IMNOTCC_ORIGINS` | — | Comma-separated allowed origins (e.g. `https://cc.example.com`) for API and WebSocket requests. |
 | `IMNOTCC_DATA_DIR` | `data/` (`data/dev/` in dev) | Directory for `state.json` and initial `password.txt`. |
 | `IMNOTCC_PASSWORD` | Random on first run | Initial login password when `state.json` has no auth record yet. |
+| `IMNOTCC_RG` | `rg` on `PATH` | Path to the ripgrep binary used by file search. |
 | `IMNOTCC_WSL_DISTRO` | `Ubuntu` | WSL distribution used when a session folder starts with `/`. |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code config directory read for `settings.json` and transcripts of **Windows** sessions. **WSL** sessions ignore it and use WSL's own `~/.claude` (read through `//wsl.localhost/<distro>`). |
 

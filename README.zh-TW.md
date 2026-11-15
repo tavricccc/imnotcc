@@ -30,6 +30,9 @@
 - **工作中送出訊息**：可「加入佇列」等這一回合結束，或「引導」插進正在跑的回合；預設在設定裡選，長按送出（電腦用 Ctrl+Enter）單次改用另一種。
 - **App 內登入 Claude**：Claude Code 未登入或登入過期時，App 會提示並帶你完成登入，不用開終端機。
 - **擴充元件管理**：透過 `claude plugin` 檢視、安裝、移除、啟用、停用擴充元件與新增 marketplace。
+- **檔案總管與搜尋**：對話頂端的資料夾按鈕會在預覽面板打開 session 的資料夾，可以瀏覽整台主機，也能依檔名或內容搜尋（`PATH` 上有 `rg` 或設定 `IMNOTCC_RG` 時用 ripgrep，否則逐檔掃描）。金鑰與憑證（`~/.ssh`、`~/.aws`、`.env`、`*.pem`、`*.key`、瀏覽器設定檔、app 的資料夾等）一律不列出、不預覽、不搜尋、不下載。
+- **上傳與下載**：訊息可以附加任何檔案：圖片照舊直接給 Claude，其他檔案（上限 50 MB）會上傳到 session 資料夾的 `.imnotcc/uploads/`（透過 `.imnotcc/.gitignore` 排除在 git 之外），訊息裡附上路徑。任何檔案都能下載，資料夾可以打包成 zip（不含 `.git` 和 `node_modules`）。
+- **多台 Server（桌面版）**：連過的 server 都會記在清單裡，可以從系統匣選單或 App 設定切換。
 - **WSL 支援（Windows）**：路徑以 `/` 開頭的資料夾會自動在 WSL（`IMNOTCC_WSL_DISTRO`，預設 `Ubuntu`）中執行。
 - **PWA**：可安裝至 iOS／Android 主畫面。
 
@@ -116,6 +119,7 @@ Start-ScheduledTask -TaskName 'imnotcc'
 | `IMNOTCC_ORIGINS` | — | 允許的來源網域，逗號分隔（例如 `https://cc.example.com`）。 |
 | `IMNOTCC_DATA_DIR` | `data/`（開發模式 `data/dev/`） | 存放 `state.json` 與初始 `password.txt` 的目錄。 |
 | `IMNOTCC_PASSWORD` | 首次啟動隨機產生 | 尚未建立帳號紀錄時的初始登入密碼。 |
+| `IMNOTCC_RG` | `PATH` 上的 `rg` | 檔案搜尋使用的 ripgrep 執行檔路徑。 |
 | `IMNOTCC_WSL_DISTRO` | `Ubuntu` | Windows 上路徑為 `/` 開頭時使用的 WSL 發行版名稱。 |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | **Windows** 對話讀取 `settings.json` 與對話紀錄的 Claude Code 設定目錄。**WSL** 對話不使用此變數，而是使用 WSL 內的 `~/.claude`（經由 `//wsl.localhost/<distro>` 讀取）。 |
 
