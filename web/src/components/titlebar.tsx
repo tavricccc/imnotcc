@@ -1,4 +1,5 @@
 import * as React from "react";
+import { SidebarSimple } from "@phosphor-icons/react/ssr";
 import { isTauri } from "@/lib/tauri";
 
 interface TauriWindowHandle {
@@ -13,7 +14,7 @@ function getCurrentTauriWindow(): TauriWindowHandle | null {
   return g?.window?.getCurrentWindow ? g.window.getCurrentWindow() : null;
 }
 
-export function Titlebar() {
+export function Titlebar({ sidebar }: { sidebar?: { collapsed: boolean; toggle: () => void } } = {}) {
   const active = isTauri();
 
   React.useLayoutEffect(() => {
@@ -21,17 +22,20 @@ export function Titlebar() {
     // Not undone on unmount: the app swaps between login and main views, each with its own titlebar,
     // and the window stays frameless either way.
     document.documentElement.style.setProperty("--safe-top", "36px");
+    document.documentElement.dataset.tauri = "1";
   }, [active]);
 
   if (!active) return null;
 
+  const toggleLabel = sidebar ? (sidebar.collapsed ? "展開側邊欄" : "收起側邊欄") : undefined;
+
   return (
     <div
-      className="fixed inset-x-0 top-0 z-[100] flex h-9 select-none items-stretch justify-between border-b border-line bg-canvas text-ink-muted"
+      className="fixed inset-x-0 top-0 z-[100] flex h-9 select-none items-stretch justify-between bg-transparent text-ink-muted"
       id="ccr-titlebar"
     >
       <div
-        className="flex flex-1 items-center gap-2 pl-3.5 text-xs font-semibold tracking-wide"
+        className="flex flex-1 items-center gap-2 pl-3 text-xs font-semibold tracking-wide"
         data-tauri-drag-region
         onDoubleClick={() => void getCurrentTauriWindow()?.toggleMaximize()}
         onMouseDown={(e) => {
@@ -40,6 +44,19 @@ export function Titlebar() {
       >
         <img alt="" className="size-4 rounded-[22.37%]" src="/icon.svg" />
         <span>imnotcc</span>
+        {sidebar ? (
+          <button
+            aria-expanded={!sidebar.collapsed}
+            aria-label={toggleLabel}
+            className="ml-1 hidden size-7 place-items-center rounded-md text-ink-muted transition-colors hover:bg-surface-pressed hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:grid"
+            onClick={sidebar.toggle}
+            onMouseDown={(e) => e.stopPropagation()}
+            title={toggleLabel}
+            type="button"
+          >
+            <SidebarSimple size={16} weight={sidebar.collapsed ? "regular" : "fill"} />
+          </button>
+        ) : null}
       </div>
       <div className="flex items-stretch">
         <button

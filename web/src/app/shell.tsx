@@ -1,21 +1,12 @@
 import * as React from "react";
-import { CaretLeft, CaretRight, ChatsCircle, GearSix, PuzzlePiece, SlidersHorizontal } from "@phosphor-icons/react/ssr";
-import { navigate } from "@/lib/app-navigation";
+import { SidebarSimple } from "@phosphor-icons/react/ssr";
+import { isTauri } from "@/lib/tauri";
 import { prefs } from "@/lib/prefs";
 import { useStore } from "@/lib/store-core";
 import { cn } from "@/lib/utils";
+import { Button } from "@/ui/button";
 import { EdgeBlur } from "@/ui/edge-blur";
-import { PrimaryNav, type NavItem } from "@/ui/nav";
 
-const RAIL_ITEMS: NavItem[] = [
-  { href: "/", icon: ChatsCircle, label: "對話" },
-  { href: "/plugins", icon: PuzzlePiece, label: "擴充元件" },
-  { href: "/settings", icon: SlidersHorizontal, label: "Claude 設定" },
-];
-const DOCK_ITEMS: NavItem[] = [
-  ...RAIL_ITEMS,
-  { href: "/app", icon: GearSix, label: "App 設定" },
-];
 const MIN_SIDEBAR_WIDTH = 232;
 const MAX_SIDEBAR_WIDTH = 420;
 const sidebarLimit = () => Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDTH, Math.floor(window.innerWidth * 0.4)));
@@ -23,11 +14,9 @@ const sidebarLimit = () => Math.max(MIN_SIDEBAR_WIDTH, Math.min(MAX_SIDEBAR_WIDT
 /**
  * The signed-in frame. Fixed page headers and chat controls share the same desktop inset.
  */
-export function AppShell({ active, bare, children, dock, sessions }: {
-  active: string;
+export function AppShell({ bare, children, sessions }: {
   bare: boolean;
   children: React.ReactNode;
-  dock: boolean;
   sessions?: { content: React.ReactNode; collapsed: boolean; toggle: () => void };
 }) {
   const showSessions = !!sessions && !sessions.collapsed;
@@ -53,54 +42,32 @@ export function AppShell({ active, bare, children, dock, sessions }: {
   }
 
   return (
-    <div className="min-h-svh [--rail-width:3.5rem] md:pl-[var(--desktop-inset)] motion-safe:transition-[padding-left] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)]"
+    <div className="min-h-svh md:pl-[var(--desktop-inset)] motion-safe:transition-[padding-left] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)]"
       style={{
         "--session-sidebar-width": `${width}px`,
         "--sidebar-motion": dragWidth === null ? "var(--motion-nav)" : "0ms",
-        "--desktop-inset": showSessions ? "calc(var(--rail-width) + var(--session-sidebar-width))" : "var(--rail-width)",
+        "--desktop-inset": showSessions ? "var(--session-sidebar-width)" : "0px",
       } as React.CSSProperties}>
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-[var(--rail-width)] flex-col items-center gap-4 border-r border-line pb-4 pt-[calc(var(--safe-top)+1rem)] md:flex">
-        {sessions ? (
-          <button
-            aria-controls="session-sidebar"
-            aria-expanded={showSessions}
-            aria-label={toggleLabel}
-            className="group relative grid size-8 cursor-pointer place-items-center rounded-icon text-ink-muted transition-colors hover:bg-surface-hover hover:text-ink focus-visible:bg-surface-hover focus-visible:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            onClick={sessions.toggle}
-            title={toggleLabel}
-            type="button"
-          >
-            <img alt="" className="size-8 rounded-icon transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0" src="/icon.svg" />
-            <span aria-hidden className="pointer-events-none absolute inset-0 grid place-items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
-              {showSessions ? <CaretLeft size={16} weight="bold" /> : <CaretRight size={16} weight="bold" />}
-            </span>
-          </button>
-        ) : (
-          <img alt="imnotcc" className="size-8 rounded-icon" src="/icon.svg" />
-        )}
-        <PrimaryNav activeHref={active} items={RAIL_ITEMS} label="主選單" variant="rail" />
-        <button
-          aria-current={active === "/app" ? "page" : undefined}
-          aria-label="App 設定"
-          className={cn(
-            "mt-auto grid size-9 cursor-pointer place-items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-            active === "/app" ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-surface-hover hover:text-ink",
-          )}
-          onClick={() => navigate("/app")}
-          title="App 設定"
-          type="button"
+      {sessions && !showSessions && !isTauri() ? (
+        <Button
+          aria-label={toggleLabel}
+          className="fixed left-3 top-3 z-40 hidden md:inline-flex"
+          onClick={sessions.toggle}
+          size="icon-sm"
+          title={toggleLabel}
+          variant="ghost"
         >
-          <GearSix size={20} weight={active === "/app" ? "fill" : "regular"} />
-        </button>
-      </aside>
+          <SidebarSimple size={16} />
+        </Button>
+      ) : null}
       {sessions ? (
         <aside aria-label="對話清單" className={cn(
-          "fixed inset-y-0 left-[var(--rail-width)] z-30 hidden overflow-clip bg-surface/60 md:block",
+          "fixed inset-y-0 left-0 z-30 hidden overflow-clip md:block",
           "motion-safe:transition-[width] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)]",
           showSessions ? "w-[var(--session-sidebar-width)]" : "w-0",
         )} id="session-sidebar" inert={!showSessions}>
           <div className={cn(
-            "h-full w-[var(--session-sidebar-width)] border-r border-line",
+            "h-full w-[var(--session-sidebar-width)]",
             "motion-safe:transition-transform motion-safe:duration-[var(--motion-nav)] motion-safe:ease-[var(--ease-nav)]",
             !showSessions && "-translate-x-4",
           )}>{sessions.content}</div>
@@ -135,34 +102,29 @@ export function AppShell({ active, bare, children, dock, sessions }: {
         </aside>
       ) : null}
       {bare ? children : (
-        <main
-          className={cn(
-            "mx-auto w-full max-w-3xl px-[var(--gutter)] pt-[calc(var(--safe-top)+1.5rem)] md:px-8 md:pb-12 md:pt-[calc(var(--safe-top)+2.5rem)]",
-            dock ? "pb-[calc(var(--bottom-nav-height)+var(--bottom-nav-gap)+1.5rem)]" : "pb-[max(2rem,var(--safe-bottom))]",
-          )}
-        >
-          {children}
-        </main>
+        <div className={cn(
+          "md:fixed md:inset-x-0 md:bottom-0 md:top-[var(--safe-top)] md:left-[var(--desktop-inset)] md:overflow-y-auto md:overscroll-contain md:bg-surface md:border-t md:border-line",
+          "motion-safe:transition-[left,border-radius] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)]",
+          showSessions && "md:rounded-tl-2xl md:border-l",
+        )}>
+          <main
+            className={cn(
+              "mx-auto w-full max-w-3xl px-[var(--gutter)] pb-[max(2rem,var(--safe-bottom))] pt-[calc(var(--safe-top)+1.5rem)] md:px-8 md:pb-12 md:pt-8",
+            )}
+          >
+            {children}
+          </main>
+        </div>
       )}
       {bare ? null : (
         <>
-          <EdgeBlur className="h-[calc(var(--safe-top)+5rem)] md:left-[var(--desktop-inset)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)] md:h-20" side="top" />
+          <EdgeBlur className={cn("h-[calc(var(--safe-top)+5rem)] md:top-[var(--safe-top)] md:left-[var(--desktop-inset)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)] md:h-12", showSessions && "md:rounded-tl-2xl")} side="top" />
           <EdgeBlur
-            className={cn("md:left-[var(--desktop-inset)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)] md:h-16", dock ? "h-[calc(var(--bottom-nav-height)+var(--bottom-nav-gap)+1.5rem)]" : "h-[calc(var(--safe-bottom)+2rem)]")}
+            className="h-[calc(var(--safe-bottom)+2rem)] md:left-[var(--desktop-inset)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion)] motion-safe:ease-[var(--ease-nav)] md:h-12"
             side="bottom"
           />
         </>
       )}
-      <div
-        aria-hidden={!dock}
-        className={cn(
-          "fixed inset-x-[var(--gutter)] bottom-[var(--bottom-nav-gap)] z-30 mx-auto max-w-xs transition-[opacity,translate] duration-[var(--motion-nav)] ease-[var(--ease-nav)] md:hidden",
-          dock ? "translate-y-0 opacity-100" : bare ? "hidden" : "pointer-events-none translate-y-6 opacity-0",
-        )}
-        inert={!dock}
-      >
-        <PrimaryNav activeHref={active} items={DOCK_ITEMS} label="主選單" variant="dock" />
-      </div>
     </div>
   );
 }

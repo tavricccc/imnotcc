@@ -203,6 +203,15 @@
     background: var(--surface-raised); border: 1px solid var(--line);
   }
   .pw { font: 700 20px Consolas, monospace; letter-spacing: .06em; user-select: all; }
+  .choice-pills { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .current-box {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 12px 16px; border-radius: 16px;
+    background: var(--surface); border: 1px solid var(--line);
+    box-shadow: var(--elevation-panel);
+  }
+  .current-meta { font-size: 13px; color: var(--ink-muted); min-width: 0; overflow-wrap: anywhere; }
+  .current-meta strong { color: var(--ink); font-weight: 600; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -216,10 +225,18 @@
 
   <!-- Step 1: Choose Role -->
   <div class="choices" id="step-choose" hidden>
+    <div class="current-box" id="current-box" hidden>
+      <div class="current-meta" id="current-text"></div>
+      <button class="btn btn-ghost" id="resume-btn" type="button" style="flex-shrink:0;padding:8px 14px;font-size:13px;">繼續使用</button>
+    </div>
+
     <button class="choice-card" id="pick-local" type="button">
       <div class="choice-head">
         <span class="choice-title">把這台電腦設為 Server</span>
-        <span class="pill" id="node-badge">檢查 Node.js…</span>
+        <span class="choice-pills">
+          <span class="pill accent" id="local-active-pill" hidden>目前設定</span>
+          <span class="pill" id="node-badge">檢查 Node.js…</span>
+        </span>
       </div>
       <p class="choice-desc">在這台電腦本機執行 imnotcc 與 Claude Code，關掉視窗後會留在系統匣繼續運作，讓手機或其他裝置連線。</p>
     </button>
@@ -227,10 +244,15 @@
     <button class="choice-card" id="pick-remote" type="button">
       <div class="choice-head">
         <span class="choice-title">連到現有的 Server</span>
-        <span class="pill accent">Client</span>
+        <span class="choice-pills">
+          <span class="pill accent" id="remote-active-pill" hidden>目前設定</span>
+          <span class="pill accent">Client</span>
+        </span>
       </div>
       <p class="choice-desc">這台電腦只作為桌面端視窗，連線到另一台已經架設好的 imnotcc 伺服器。</p>
     </button>
+
+    <div class="err" id="choose-err"></div>
   </div>
 
   <!-- Step 2A: Remote Client Setup -->
@@ -295,7 +317,7 @@
       <span class="spinner" id="inst-spinner"></span>
       <h2 id="inst-title" style="margin:0;">正在安裝本機 Server…</h2>
     </div>
-    <p class="sub" style="margin-top:6px;">正在使用本機 Node.js 下載 Claude Agent SDK 等套件（約 400 MB），請稍候。</p>
+    <p class="sub" id="inst-sub" style="margin-top:6px;">正在準備本機 Server，請稍候。</p>
     <pre class="log-box" id="log"></pre>
     <div class="err" id="inst-err"></div>
     <div class="actions" id="inst-fail" hidden>
@@ -310,8 +332,8 @@
       <span class="pill ok">就緒</span>
       <h2 style="margin:0;">本機 Server 已經啟動</h2>
     </div>
-    <p class="sub">請記下登入密碼，之後也能在「App 設定」裡再次查看或更改。</p>
-    <div class="pw-box">
+    <p class="sub" id="done-sub">請記下這組初始登入密碼；登入後建議到「App 設定 → 更改密碼」設定自己的密碼。</p>
+    <div class="pw-box" id="pw-section">
       <span class="pw" id="pw"></span>
       <button class="btn btn-ghost" id="copy-pw" type="button">複製密碼</button>
     </div>
@@ -330,6 +352,7 @@
   const show = (id) => { for (const s of steps) $(s).hidden = s !== id; };
   let doneUrl = null;
   let stateCache = null;
+  let isUpdateInstall = false;
 
   async function refresh() {
     const st = await invoke("get_state");
@@ -337,7 +360,33 @@
     $("local-url").textContent = st.local_url;
     $("local-port").value = st.config.port || 4280;
     $("local-origins").value = (st.config.origins || []).join("\n");
-    if (st.config.url && !st.config.local) $("remote-url").value = st.config.url;
+    const savedRemote = st.config.remote_url || (!st.config.local ? st.config.url : "");
+    if (savedRemote) $("remote-url").value = savedRemote;
+
+    const configured = st.config.local || Boolean(st.config.url) || Boolean(st.config.installed_version);
+    const autoVal = configured ? st.autostart : true;
+    $("local-autostart").checked = autoVal;
+    $("remote-autostart").checked = autoVal;
+
+    $("local-active-pill").hidden = !st.config.local;
+    $("remote-active-pill").hidden = st.config.local || !st.config.url;
+
+    const canResume = (st.config.local && !st.needs_update) || (!st.config.local && Boolean(st.config.url));
+    $("current-box").hidden = !canResume;
+    if (canResume) {
+      $("current-text").innerHTML = "";
+      const label = document.createElement("strong");
+      label.textContent = st.config.local ? "目前設定：本機 Server" : "目前設定：遠端 Server";
+      const detail = document.createElement("div");
+      detail.textContent = st.config.local
+        ? `${st.local_url}${st.config.origins?.length ? ` · ${st.config.origins.length} 個公開網域` : ""}`
+        : st.config.url;
+      $("current-text").append(label, detail);
+    }
+
+    $("local-submit").textContent = st.config.local && !st.needs_deps_install
+      ? (st.needs_update ? "更新並啟動 Server" : "套用設定並啟動 Server")
+      : "安裝並啟動 Server";
 
     const nodeOk = "Ok" in st.node;
     const badge = $("node-badge");
@@ -352,10 +401,27 @@
     return st;
   }
 
-  $("pick-local").addEventListener("click", () => show("step-local"));
-  $("pick-remote").addEventListener("click", () => show("step-remote"));
+  $("pick-local").addEventListener("click", () => {
+    $("local-err").textContent = "";
+    show("step-local");
+  });
+  $("pick-remote").addEventListener("click", () => {
+    $("remote-err").textContent = "";
+    show("step-remote");
+  });
   $("local-back").addEventListener("click", () => show("step-choose"));
   $("remote-back").addEventListener("click", () => show("step-choose"));
+
+  $("resume-btn").addEventListener("click", async () => {
+    $("choose-err").textContent = "";
+    $("resume-btn").disabled = true;
+    try {
+      await invoke("resume_current");
+    } catch (err) {
+      $("choose-err").textContent = String(err);
+      $("resume-btn").disabled = false;
+    }
+  });
 
   $("remote-form").addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -372,20 +438,38 @@
   });
 
   async function startInstall(update) {
+    isUpdateInstall = update;
+    if (!update) {
+      $("local-err").textContent = "";
+      const port = Number($("local-port").value);
+      if (!Number.isInteger(port) || port < 1 || port > 65535) {
+        $("local-err").textContent = "連接埠必須在 1 到 65535 之間";
+        return;
+      }
+      const origins = $("local-origins").value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+      $("local-submit").disabled = true;
+      try {
+        await invoke("save_local_settings", { port, origins });
+        await invoke("set_autostart", { enabled: $("local-autostart").checked });
+      } catch (err) {
+        $("local-err").textContent = String(err);
+        $("local-submit").disabled = false;
+        return;
+      }
+      $("local-submit").disabled = false;
+    }
+
     $("inst-title").textContent = update ? "imnotcc 已更新，正在更新本機 Server…" : "正在安裝本機 Server…";
+    $("inst-sub").textContent = stateCache?.needs_deps_install !== false
+      ? "正在使用本機 Node.js 下載 Claude Agent SDK 等套件（約 400 MB），請稍候。"
+      : "相依套件已就緒，正在套用設定並啟動本機 Server，請稍候。";
     $("inst-spinner").hidden = false;
     $("log").textContent = "";
     $("inst-err").textContent = "";
     $("inst-fail").hidden = true;
     show("step-installing");
     try {
-      if (!update) {
-        const port = Number($("local-port").value);
-        const origins = $("local-origins").value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
-        await invoke("save_local_settings", { port, origins });
-        await invoke("set_autostart", { enabled: $("local-autostart").checked });
-      }
-      await invoke("install_local");
+      await invoke("install_local", { force: false });
     } catch (err) {
       $("inst-spinner").hidden = true;
       $("inst-err").textContent = String(err);
@@ -397,8 +481,11 @@
     e.preventDefault();
     void startInstall(false);
   });
-  $("inst-retry").addEventListener("click", () => void startInstall(false));
-  $("inst-back").addEventListener("click", () => show("step-local"));
+  $("inst-retry").addEventListener("click", () => void startInstall(isUpdateInstall));
+  $("inst-back").addEventListener("click", () => {
+    void refresh();
+    show("step-local");
+  });
 
   listen("install-log", (e) => {
     const l = $("log");
@@ -410,9 +497,21 @@
     const d = e.payload;
     $("inst-spinner").hidden = true;
     if (d.ok) {
+      if (isUpdateInstall) {
+        void invoke("open_url", { url: d.url });
+        return;
+      }
       doneUrl = d.url;
       $("local-url").textContent = d.url;
-      $("pw").textContent = d.password ?? "（請在「App 設定」查看）";
+      if (d.password) {
+        $("pw-section").hidden = false;
+        $("pw").textContent = d.password;
+        $("done-sub").textContent = "請記下這組初始登入密碼；登入後建議到「App 設定 → 更改密碼」設定自己的密碼。";
+      } else {
+        $("pw-section").hidden = true;
+        $("pw").textContent = "";
+        $("done-sub").textContent = "本機 Server 已就緒，請使用你先前設定的密碼登入。";
+      }
       show("step-done");
     } else {
       $("inst-err").textContent = d.error + "\n完整紀錄：" + d.log;
@@ -435,6 +534,9 @@
   refresh().then((st) => {
     if (st.needs_update) void startInstall(true);
     else show("step-choose");
+  }).catch((err) => {
+    show("step-choose");
+    $("choose-err").textContent = String(err);
   });
 </script>
 </body>

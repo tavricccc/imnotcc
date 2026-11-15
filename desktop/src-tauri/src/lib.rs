@@ -10,6 +10,7 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::window::{Effect, EffectsBuilder};
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_dialog::DialogExt;
@@ -29,10 +30,13 @@ pub fn local_url(app: &AppHandle) -> String {
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
     /// Server the window opens. None means show the setup page.
+    #[serde(default)]
     pub url: Option<String>,
     /// This PC runs the server.
+    #[serde(default)]
     pub local: bool,
     /// App version whose server files are installed locally.
+    #[serde(default)]
     pub installed_version: Option<String>,
     /// Port the local server listens on; change it in config.json if 4280 is taken.
     #[serde(default = "default_port")]
@@ -41,11 +45,14 @@ pub struct Config {
     /// e.g. a Cloudflare Tunnel hostname.
     #[serde(default)]
     pub origins: Vec<String>,
+    /// Last remote server URL configured by the user, kept when switching between local and remote.
+    #[serde(default)]
+    pub remote_url: Option<String>,
 }
 
 impl Default for Config {
     fn default() -> Self {
-        Config { url: None, local: false, installed_version: None, port: default_port(), origins: Vec::new() }
+        Config { url: None, local: false, installed_version: None, port: default_port(), origins: Vec::new(), remote_url: None }
     }
 }
 
@@ -65,7 +72,25 @@ fn config_path(app: &AppHandle) -> PathBuf {
 }
 
 fn load_config(app: &AppHandle) -> Config {
-    fs::read_to_string(config_path(app)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+    let path = config_path(app);
+    let Ok(raw) = fs::read_to_string(&path) else {
+        return Config::default();
+    };
+    match serde_json::from_str::<Config>(raw.trim_start_matches('\u{feff}')) {
+        Ok(mut c) => {
+            if c.port == 0 {
+                c.port = default_port();
+            }
+            if c.local && c.url.is_none() {
+                c.url = Some(format!("http://127.0.0.1:{}", c.port));
+            }
+            c
+        }
+        Err(e) => {
+            eprintln!("[imnotcc] failed to parse {}: {e}", path.display());
+            Config::default()
+        }
+    }
 }
 
 pub fn save_config(app: &AppHandle, c: &Config) -> Result<(), String> {
@@ -74,7 +99,7 @@ pub fn save_config(app: &AppHandle, c: &Config) -> Result<(), String> {
 }
 
 pub fn needs_update(app: &AppHandle, c: &Config) -> bool {
-    c.local && c.installed_version.as_deref() != Some(&app.package_info().version.to_string())
+    c.local && (c.installed_version.as_deref() != Some(&app.package_info().version.to_string()) || !local::server_files_present(app))
 }
 
 /// Who is calling a desktop command.
@@ -253,6 +278,8 @@ pub fn open_window(app: &AppHandle, url: Option<String>, show: bool) -> Result<(
         .inner_size(1100.0, 820.0)
         .min_inner_size(360.0, 480.0)
         .decorations(false)
+        .transparent(true)
+        .effects(EffectsBuilder::new().effect(Effect::Mica).build())
         .initialization_script(TITLEBAR_SCRIPT)
         .visible(show)
         .build()
@@ -287,6 +314,7 @@ struct StateView {
     config: Config,
     node: Result<String, String>,
     needs_update: bool,
+    needs_deps_install: bool,
     local_url: String,
     autostart: bool,
     data_dir: String,
@@ -304,6 +332,7 @@ fn get_state(app: AppHandle, window: WebviewWindow) -> Result<StateView, String>
     let autostart = app.autolaunch().is_enabled().unwrap_or(false);
     Ok(StateView {
         needs_update: needs_update(&app, &config),
+        needs_deps_install: local::needs_deps_install(&app),
         config,
         node: local::node_version(),
         local_url: local_url(&app),
@@ -343,17 +372,52 @@ async fn use_remote(app: AppHandle, window: WebviewWindow, url: String) -> Resul
     if state.config.lock().unwrap().local {
         state.server.stop();
     }
-    let c = { let mut c = state.config.lock().unwrap(); c.url = Some(url.clone()); c.local = false; c.clone() };
+    let c = { let mut c = state.config.lock().unwrap(); c.url = Some(url.clone()); c.remote_url = Some(url.clone()); c.local = false; c.clone() };
     save_config(&app, &c)?;
     open_window(&app, Some(url), true)
 }
 
 #[tauri::command]
-async fn install_local(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+async fn install_local(app: AppHandle, window: WebviewWindow, force: Option<bool>) -> Result<(), String> {
     let who = caller(&app, &window)?;
     confirm(&app, who, "要在這台電腦安裝並啟動本機 server 嗎？\n\n不是你自己按的話請按「取消」。".into()).await?;
-    local::start_install(app);
+    local::start_install(app, force.unwrap_or(false));
     Ok(())
+}
+
+#[tauri::command]
+async fn update_sdk(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    let who = caller(&app, &window)?;
+    if !app.state::<AppState>().config.lock().unwrap().local {
+        return Err("這台電腦目前沒有設成 server。".into());
+    }
+    confirm(&app, who, "要更新本機 server 的 Claude Agent SDK 嗎？\n\n更新期間執行中的對話會短暫中斷。不是你自己按的話請按「取消」。".into()).await?;
+    local::start_sdk_update(app);
+    Ok(())
+}
+
+#[tauri::command]
+fn resume_current(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
+    if caller(&app, &window)? != Caller::Setup {
+        return Err("not allowed from this page".into());
+    }
+    let state = app.state::<AppState>();
+    let cfg = state.config.lock().unwrap().clone();
+    if cfg.local {
+        if needs_update(&app, &cfg) {
+            return Err("本機 server 需要先完成更新".into());
+        }
+        if state.server.is_running() {
+            open_window(&app, Some(local_url(&app)), true)?;
+        } else {
+            local::start_and_open(&app, true);
+        }
+        return Ok(());
+    }
+    if let Some(url) = cfg.url {
+        return open_window(&app, Some(url), true);
+    }
+    Err("尚未設定 server".into())
 }
 
 #[tauri::command]
@@ -375,8 +439,8 @@ fn open_url(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), St
 fn show_password(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     from_trusted_page(&app, &window)?;
     let msg = match local::read_password(&app) {
-        Some(p) => format!("本機 server 的初始密碼：\n\n{p}\n\n（在網頁設定裡改過密碼的話，這裡仍是最初的密碼）"),
-        None => "這台電腦沒有設成 server，或 server 還沒啟動過。".into(),
+        Some(p) => format!("本機 server 的初始密碼：\n\n{p}\n\n（尚未更改過密碼。建議登入後到「App 設定 → 更改密碼」設定自己的密碼。）"),
+        None => "目前沒有初始密碼紀錄（可能已更改過密碼，或本機 server 尚未啟動）。".into(),
     };
     app.dialog().message(msg).title("imnotcc").show(|_| {});
     Ok(())
@@ -415,6 +479,22 @@ async fn save_local_settings(app: AppHandle, window: WebviewWindow, port: u16, o
     let state = app.state::<AppState>();
     let old = state.config.lock().unwrap().clone();
     let port_changed = old.port != port;
+    if who == Caller::Setup {
+        // Setup saves port & origins before calling install_local, which starts/restarts the server
+        // and lets the setup page transition cleanly once ready.
+        if (!old.local || port_changed || !state.server.is_running()) && local::port_in_use(port) {
+            return Err(format!("連接埠 {port} 已經被別的程式占用，換一個試試。"));
+        }
+        let mut c = state.config.lock().unwrap();
+        c.port = port;
+        c.origins = clean;
+        if c.local {
+            c.url = Some(format!("http://127.0.0.1:{port}"));
+        }
+        let c = c.clone();
+        save_config(&app, &c)?;
+        return Ok(c);
+    }
     if !port_changed && old.origins == clean {
         return Ok(old);
     }
@@ -492,6 +572,34 @@ fn open_log_dir(app: AppHandle, window: WebviewWindow) -> Result<(), String> {
     std::process::Command::new("explorer").arg(local::log_dir(&app)).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn reveal_file(app: AppHandle, window: WebviewWindow, path: String) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    from_trusted_page(&app, &window)?;
+    if !app.state::<AppState>().config.lock().unwrap().local {
+        return Err("只有本機 Server（Host）模式可以在檔案總管顯示".into());
+    }
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("缺少檔案路徑".into());
+    }
+    let win_path = trimmed.replace('/', "\\");
+    let target = std::path::Path::new(&win_path);
+    if !target.exists() {
+        return Err(format!("找不到這個檔案：{win_path}"));
+    }
+    if target.is_dir() {
+        std::process::Command::new("explorer").arg(&win_path).spawn().map(|_| ()).map_err(|e| e.to_string())
+    } else {
+        let quoted = win_path.replace('"', "");
+        std::process::Command::new("explorer")
+            .raw_arg(format!("/select,\"{quoted}\""))
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+}
+
 /// Opens a Claude sign-in link in the system browser; any other address is refused.
 #[tauri::command]
 fn open_external(app: AppHandle, window: WebviewWindow, url: String) -> Result<(), String> {
@@ -559,8 +667,19 @@ fn migrate_from_cc_remote() -> bool {
     use std::os::windows::process::CommandExt;
     let Some(base) = std::env::var_os("LOCALAPPDATA").map(PathBuf::from) else { return false };
     let (old, new) = (base.join("dev.ccremote.desktop"), base.join("dev.imnotcc.app"));
-    if old.is_dir() && !new.exists() {
-        if let Err(e) = std::fs::rename(&old, &new) { eprintln!("[imnotcc] could not move {}: {e}", old.display()); }
+    if old.is_dir() {
+        if !new.exists() {
+            if let Err(e) = std::fs::rename(&old, &new) { eprintln!("[imnotcc] could not move {}: {e}", old.display()); }
+        } else if !new.join("config.json").exists() && old.join("config.json").exists() {
+            // Migrate saved config/data if dev.imnotcc.app was created beforehand (e.g. WebView2 EBWebView).
+            let _ = std::fs::rename(old.join("config.json"), new.join("config.json"));
+            for dir in ["data", "server-app", "logs"] {
+                let (src, dst) = (old.join(dir), new.join(dir));
+                if src.is_dir() && !dst.exists() {
+                    let _ = std::fs::rename(&src, &dst);
+                }
+            }
+        }
     }
     let reg = |args: &[&str]| std::process::Command::new("reg").args(args).creation_flags(0x0800_0000).status().map(|s| s.success()).unwrap_or(false);
     const RUN: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
@@ -578,6 +697,8 @@ pub fn run() {
             get_state,
             use_remote,
             install_local,
+            update_sdk,
+            resume_current,
             open_url,
             open_node_download,
             save_local_settings,
@@ -585,6 +706,7 @@ pub fn run() {
             restart_local,
             open_data_dir,
             open_log_dir,
+            reveal_file,
             open_setup,
             open_external,
             show_password
@@ -598,8 +720,13 @@ pub fn run() {
 
             let minimized = std::env::args().any(|a| a == "--minimized");
             if needs_update(&handle, &config) {
-                // New app version: the setup page reinstalls the server files, then opens it.
-                open_window(&handle, None, true)?;
+                if !local::needs_deps_install(&handle) {
+                    // Dependencies (including Agent SDK) are unchanged: update bundled files in place.
+                    local::update_and_open(&handle, !minimized);
+                } else {
+                    // New dependencies or missing node_modules: show setup progress UI.
+                    open_window(&handle, None, true)?;
+                }
             } else if config.local {
                 local::start_and_open(&handle, !minimized);
             } else {
@@ -616,4 +743,19 @@ pub fn run() {
             tauri::RunEvent::Exit => app.state::<AppState>().server.stop(),
             _ => {}
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_partial_and_bom_config() {
+        let raw = "\u{feff}{\"port\": 5123, \"origins\": [\"https://cc.example.com\"]}";
+        let cfg: Config = serde_json::from_str(raw.trim_start_matches('\u{feff}')).unwrap();
+        assert_eq!(cfg.port, 5123);
+        assert_eq!(cfg.origins, vec!["https://cc.example.com"]);
+        assert!(!cfg.local);
+        assert_eq!(cfg.url, None);
+    }
 }

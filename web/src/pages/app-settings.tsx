@@ -1,7 +1,7 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { ArrowsClockwise, Desktop, FolderOpen, Globe, Key, Laptop, Link, SignOut, Trash } from "@phosphor-icons/react/ssr";
-import { auth, post } from "@/lib/api";
+import { ArrowsClockwise, Desktop, FolderOpen, Globe, Key, Laptop, Link, Package, SignOut, Trash } from "@phosphor-icons/react/ssr";
+import { auth, get, post } from "@/lib/api";
 import { claudeAuth, refreshClaudeAuth, TARGET_LABEL, type ClaudeTarget } from "@/lib/claude-auth";
 import { ClaudeLoginSheet } from "@/components/claude-login";
 import { clearCache } from "@/lib/cache";
@@ -148,7 +148,7 @@ function ProjectSessionsSettings({ limit }: { limit: typeof SESSION_LIMITS[numbe
   );
 }
 
-function PasswordSheet({ onOpenChange, open }: { onOpenChange: (o: boolean) => void; open: boolean }) {
+function PasswordSheet({ onChanged, onOpenChange, open }: { onChanged?: () => void; onOpenChange: (o: boolean) => void; open: boolean }) {
   const [current, setCurrent] = React.useState("");
   const [next, setNext] = React.useState("");
   const [error, setError] = React.useState<string>();
@@ -162,6 +162,7 @@ function PasswordSheet({ onOpenChange, open }: { onOpenChange: (o: boolean) => v
     try {
       await post("/api/password", { current, next });
       onOpenChange(false);
+      onChanged?.();
       toast.success("已更新密碼，其他裝置要重新登入");
     } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
   }
@@ -183,7 +184,113 @@ function PasswordSheet({ onOpenChange, open }: { onOpenChange: (o: boolean) => v
   );
 }
 
-function DesktopSettings() {
+interface SdkInfo {
+  current: string | null;
+  declared: string | null;
+  latest: string | null;
+  updateAvailable: boolean;
+  checkError?: string;
+}
+
+function AgentSdkSettings({
+  canUpdateLocally,
+  onStartUpdate,
+  reloadKey,
+}: {
+  canUpdateLocally: boolean;
+  onStartUpdate?: () => void;
+  reloadKey: number;
+}) {
+  const [sdk, setSdk] = React.useState<SdkInfo | null>(null);
+  const [checking, setChecking] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    void get("/api/sdk")
+      .then((res) => { if (active) setSdk(res as SdkInfo); })
+      .catch(() => { if (active) setSdk(null); });
+    return () => { active = false; };
+  }, [reloadKey]);
+
+  const checkUpdate = async () => {
+    setChecking(true);
+    try {
+      const res = await get("/api/sdk?check=1") as SdkInfo;
+      setSdk(res);
+      if (res.checkError) {
+        toast.error(`檢查失敗：${res.checkError}`);
+      } else if (res.updateAvailable && res.latest) {
+        toast.info(`發現新版 Agent SDK：v${res.latest}`);
+      } else {
+        toast.success(`Claude Agent SDK 已是最新（v${res.current ?? "未知"}）`);
+      }
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  if (!sdk) return null;
+
+  const detail = sdk.checkError
+    ? `目前 v${sdk.current ?? "未知"} · 檢查失敗：${sdk.checkError}`
+    : sdk.updateAvailable && sdk.latest
+      ? (canUpdateLocally
+        ? `目前 v${sdk.current ?? "未知"} → 可更新至 v${sdk.latest}`
+        : `目前 v${sdk.current ?? "未知"} → 最新 v${sdk.latest}（點擊複製更新指令）`)
+      : sdk.latest
+        ? `已是最新版本 v${sdk.current ?? sdk.latest}`
+        : `目前版本 v${sdk.current ?? "未知"}`;
+
+  const handleRowClick = () => {
+    if (checking) return;
+    if (sdk.updateAvailable && sdk.latest) {
+      if (canUpdateLocally && onStartUpdate) {
+        onStartUpdate();
+      } else {
+        void navigator.clipboard.writeText("npm install @anthropic-ai/claude-agent-sdk@latest")
+          .then(() => toast.success("已複製更新指令，請在 Server 電腦執行並重啟 Server"))
+          .catch(() => toast.info("請在 Server 電腦執行：npm install @anthropic-ai/claude-agent-sdk@latest"));
+      }
+      return;
+    }
+    void checkUpdate();
+  };
+
+  return (
+    <ListGroup footer="與底層 Claude Code CLI 引擎版本同步。" title="Claude Agent SDK">
+      <ListRow
+        detail={detail}
+        disabled={checking}
+        icon={<Package />}
+        label={checking ? "檢查更新中…" : sdk.updateAvailable && sdk.latest ? (canUpdateLocally ? `更新 Agent SDK 至 v${sdk.latest}` : `有新版本 v${sdk.latest}`) : "檢查 Agent SDK 更新"}
+        onClick={handleRowClick}
+        value={sdk.current ? `v${sdk.current}` : undefined}
+      />
+      {sdk.updateAvailable ? (
+        <ListRow
+          disabled={checking}
+          icon={<ArrowsClockwise />}
+          label="重新檢查版本"
+          onClick={() => void checkUpdate()}
+        />
+      ) : null}
+    </ListGroup>
+  );
+}
+
+function DesktopSettings({
+  onLocalChange,
+  onSdkUpdated,
+  reloadKey,
+  registerSdkUpdate,
+}: {
+  onLocalChange: (isLocal: boolean) => void;
+  onSdkUpdated: () => void;
+  reloadKey: number;
+  registerSdkUpdate: (fn: (() => void) | undefined) => void;
+}) {
   const [st, setSt] = React.useState<DesktopState | null>(null);
   const [err, setErr] = React.useState<string>();
   const [remoteOpen, setRemoteOpen] = React.useState(false);
@@ -197,6 +304,8 @@ function DesktopSettings() {
   const [hostBusy, setHostBusy] = React.useState(false);
 
   const [installOpen, setInstallOpen] = React.useState(false);
+  const [installTitle, setInstallTitle] = React.useState("安裝本機 Server");
+  const [installDesc, setInstallDesc] = React.useState("會使用本機 Node.js 下載並安裝 server 所需套件。");
   const [installLogs, setInstallLogs] = React.useState("");
   const [installErr, setInstallErr] = React.useState<string>();
   const [installing, setInstalling] = React.useState(false);
@@ -205,18 +314,21 @@ function DesktopSettings() {
     try {
       const next = await tauriInvoke<DesktopState>("get_state");
       setSt(next);
+      onLocalChange(next.config.local);
       setErr(undefined);
       setPort(String(next.config.port || 4280));
       setOrigins((next.config.origins || []).join("\n"));
-      if (!next.config.local && next.config.url) setRemoteUrl(next.config.url);
+      const savedRemote = next.config.remote_url || (!next.config.local ? next.config.url : null);
+      if (savedRemote) setRemoteUrl(savedRemote);
     } catch (e) {
+      onLocalChange(false);
       setErr(String(e));
     }
-  }, []);
+  }, [onLocalChange]);
 
   React.useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, reloadKey]);
 
   React.useEffect(() => {
     let unlog: (() => void) | undefined;
@@ -227,29 +339,52 @@ function DesktopSettings() {
     void tauriListen<{ ok: boolean; error?: string; url?: string; log?: string }>("install-done", (d) => {
       setInstalling(false);
       if (d.ok) {
-        toast.success("本機 Server 已安裝並啟動");
+        toast.success("操作完成，本機 Server 已就緒");
         setInstallOpen(false);
         void load();
-        if (d.url) void tauriInvoke("open_url", { url: d.url });
+        onSdkUpdated();
+        if (d.url && window.location.origin !== d.url) void tauriInvoke("open_url", { url: d.url });
       } else {
-        setInstallErr(`${d.error || "安裝失敗"}\n紀錄：${d.log || ""}`);
+        setInstallErr(`${d.error || "操作失敗"}\n紀錄：${d.log || ""}`);
       }
     }).then((u) => { undone = u; });
     return () => { unlog?.(); undone?.(); };
-  }, [load]);
+  }, [load, onSdkUpdated]);
 
-  const startLocalInstall = async () => {
+  const startLocalInstall = async (force = false) => {
+    setInstallTitle("安裝本機 Server");
+    setInstallDesc("會使用本機 Node.js 下載並安裝 server 所需套件。");
     setInstallLogs("");
     setInstallErr(undefined);
     setInstalling(true);
     setInstallOpen(true);
     try {
-      await tauriInvoke("install_local");
+      await tauriInvoke("install_local", { force });
     } catch (e) {
       setInstalling(false);
       setInstallErr(String(e));
     }
   };
+
+  const startSdkUpdate = React.useCallback(async () => {
+    setInstallTitle("更新 Claude Agent SDK");
+    setInstallDesc("正在更新本機 Server 的 Claude Agent SDK，完成後會自動重啟本機 Server。");
+    setInstallLogs("");
+    setInstallErr(undefined);
+    setInstalling(true);
+    setInstallOpen(true);
+    try {
+      await tauriInvoke("update_sdk");
+    } catch (e) {
+      setInstalling(false);
+      setInstallErr(String(e));
+    }
+  }, []);
+
+  React.useEffect(() => {
+    registerSdkUpdate(st?.config.local ? () => { void startSdkUpdate(); } : undefined);
+    return () => registerSdkUpdate(undefined);
+  }, [registerSdkUpdate, st?.config.local, startSdkUpdate]);
 
   const submitRemote = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,7 +462,7 @@ function DesktopSettings() {
                 toast.info("已開啟 Node.js 下載頁面，裝好後再點一次檢查");
                 return;
               }
-              void startLocalInstall();
+              void startLocalInstall(false);
             }}
           />
         ) : null}
@@ -361,7 +496,7 @@ function DesktopSettings() {
             detail={st.config.installed_version ? `已安裝套件 v${st.config.installed_version}` : undefined}
             icon={<Laptop />}
             label="更新 / 重裝本機 Server 套件"
-            onClick={() => void startLocalInstall()}
+            onClick={() => void startLocalInstall(true)}
           />
         </ListGroup>
       ) : null}
@@ -404,7 +539,7 @@ function DesktopSettings() {
         </form>
       </Sheet>
 
-      <Sheet description="會使用本機 Node.js 下載並安裝 server 所需套件。" onOpenChange={(o) => { if (!installing) setInstallOpen(o); }} open={installOpen} title="安裝本機 Server">
+      <Sheet description={installDesc} onOpenChange={(o) => { if (!installing) setInstallOpen(o); }} open={installOpen} title={installTitle}>
         <div className="grid gap-3 pb-2">
           <pre className="max-h-60 overflow-auto rounded-lg border border-line bg-bg p-3 font-mono text-xs whitespace-pre-wrap">{installLogs || "準備中…"}</pre>
           {installErr ? <p className="text-sm text-danger whitespace-pre-wrap">{installErr}</p> : null}
@@ -441,6 +576,14 @@ export function AppSettingsPage() {
   const view = useStore(prefs);
   const [passwordOpen, setPasswordOpen] = React.useState(false);
   const [logoutOpen, setLogoutOpen] = React.useState(false);
+  const [desktopReload, setDesktopReload] = React.useState(0);
+  const [sdkReload, setSdkReload] = React.useState(0);
+  const [isLocalHost, setIsLocalHost] = React.useState(false);
+  const sdkUpdateRef = React.useRef<(() => void) | undefined>(undefined);
+  const registerSdkUpdate = React.useCallback((fn: (() => void) | undefined) => {
+    sdkUpdateRef.current = fn;
+  }, []);
+  const bumpSdkReload = React.useCallback(() => setSdkReload((n) => n + 1), []);
 
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -467,14 +610,27 @@ export function AppSettingsPage() {
 
       <LocalStorageSettings />
 
-      {isTauri() ? <DesktopSettings /> : null}
+      <AgentSdkSettings
+        canUpdateLocally={isTauri() && isLocalHost}
+        onStartUpdate={() => sdkUpdateRef.current?.()}
+        reloadKey={sdkReload}
+      />
+
+      {isTauri() ? (
+        <DesktopSettings
+          onLocalChange={setIsLocalHost}
+          onSdkUpdated={bumpSdkReload}
+          registerSdkUpdate={registerSdkUpdate}
+          reloadKey={desktopReload}
+        />
+      ) : null}
 
       <ListGroup title="帳號">
         <ListRow icon={<Key />} label="更改密碼" onClick={() => setPasswordOpen(true)} />
         <ListRow icon={<SignOut />} label="登出" onClick={() => setLogoutOpen(true)} tone="danger" />
       </ListGroup>
 
-      <PasswordSheet onOpenChange={setPasswordOpen} open={passwordOpen} />
+      <PasswordSheet onChanged={() => setDesktopReload((n) => n + 1)} onOpenChange={setPasswordOpen} open={passwordOpen} />
       <ConfirmDialog
         confirmLabel="登出"
         description="這個裝置要再輸入密碼才能進來。"

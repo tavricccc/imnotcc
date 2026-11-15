@@ -30,8 +30,94 @@ pub fn log_dir(app: &AppHandle) -> PathBuf {
     d
 }
 
+pub fn has_custom_password(app: &AppHandle) -> bool {
+    let Ok(raw) = fs::read_to_string(data_dir(app).join("state.json")) else {
+        return false;
+    };
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(raw.trim_start_matches('\u{feff}')) else {
+        return false;
+    };
+    val.get("auth").and_then(|a| a.get("changed")).and_then(|c| c.as_bool()) == Some(true)
+}
+
 pub fn read_password(app: &AppHandle) -> Option<String> {
+    if has_custom_password(app) {
+        return None;
+    }
     fs::read_to_string(data_dir(app).join("password.txt")).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+pub fn bundled_src_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(app.path().resource_dir().map_err(|e| e.to_string())?.join("server-app"))
+}
+
+pub fn server_files_present(app: &AppHandle) -> bool {
+    let dest = app_dir(app);
+    dest.join("server").join("index.js").is_file()
+        && dest.join("dist").join("index.html").is_file()
+        && dest.join("package.json").is_file()
+}
+
+fn prod_deps_spec(lock_path: &Path) -> Option<(serde_json::Value, serde_json::Map<String, serde_json::Value>)> {
+    let raw = fs::read_to_string(lock_path).ok()?;
+    let val: serde_json::Value = serde_json::from_str(raw.trim_start_matches('\u{feff}')).ok()?;
+    let pkgs = val.get("packages")?.as_object()?;
+    let root_deps = pkgs.get("")?.get("dependencies").cloned().unwrap_or(serde_json::Value::Null);
+    let mut prod = serde_json::Map::new();
+    for (k, v) in pkgs {
+        if k.is_empty() {
+            continue;
+        }
+        if v.get("dev").and_then(|d| d.as_bool()) == Some(true) {
+            continue;
+        }
+        prod.insert(k.clone(), v.clone());
+    }
+    Some((root_deps, prod))
+}
+
+fn dep_package_json(node_modules: &Path, name: &str) -> PathBuf {
+    let mut p = node_modules.to_path_buf();
+    for part in name.split('/') {
+        p = p.join(part);
+    }
+    p.join("package.json")
+}
+
+/// True when `dest/node_modules` is intact and matches the production dependency graph in `src/package-lock.json`.
+/// App version bumps (e.g. 0.3.1 -> 0.3.2) and devDependencies changes do not invalidate this.
+pub fn deps_up_to_date(src: &Path, dest: &Path) -> bool {
+    if dest.join(".deps-failed").exists() {
+        return false;
+    }
+    let nm = dest.join("node_modules");
+    if !nm.join(".package-lock.json").is_file() {
+        return false;
+    }
+    let Some((src_deps, src_pkgs)) = prod_deps_spec(&src.join("package-lock.json")) else {
+        return false;
+    };
+    let Some((dest_deps, dest_pkgs)) = prod_deps_spec(&dest.join("package-lock.json")) else {
+        return false;
+    };
+    if src_deps != dest_deps || src_pkgs != dest_pkgs {
+        return false;
+    }
+    if let Some(obj) = src_deps.as_object() {
+        for name in obj.keys() {
+            if !dep_package_json(&nm, name).is_file() {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+pub fn needs_deps_install(app: &AppHandle) -> bool {
+    let Ok(src) = bundled_src_dir(app) else {
+        return true;
+    };
+    !deps_up_to_date(&src, &app_dir(app))
 }
 
 fn hidden(cmd: &str) -> Command {
@@ -233,6 +319,21 @@ fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+fn copy_bundled_files(src: &Path, dest: &Path) -> Result<(), String> {
+    fs::create_dir_all(dest).map_err(|e| format!("建立 server 目錄失敗：{e}"))?;
+    for dir in ["server", "dist"] {
+        let d = dest.join(dir);
+        if d.exists() {
+            fs::remove_dir_all(&d).map_err(|e| format!("無法清掉舊的 {dir} 檔案（還有程式在用嗎？）：{e}"))?;
+        }
+        copy_dir(&src.join(dir), &d).map_err(|e| format!("複製 {dir} 檔案失敗：{e}"))?;
+    }
+    for file in ["package.json", "package-lock.json"] {
+        fs::copy(src.join(file), dest.join(file)).map_err(|e| format!("複製 {file} 失敗：{e}"))?;
+    }
+    Ok(())
+}
+
 #[derive(Serialize, Clone)]
 struct Done {
     ok: bool,
@@ -244,56 +345,12 @@ struct Done {
 
 static INSTALLING: AtomicBool = AtomicBool::new(false);
 
-/// Install (or reinstall after an app update) the server on this PC. Progress goes out as
-/// `install-log` events and the outcome as one `install-done` event.
-pub fn start_install(app: AppHandle) {
-    if INSTALLING.swap(true, Ordering::SeqCst) {
-        return;
-    }
-    thread::spawn(move || {
-        let log_path = log_dir(&app).join("install.log");
-        let result = install(&app, &log_path);
-        if let Err(e) = &result {
-            note(&log_path, &format!("FAILED: {e}"));
-        }
-        let done = Done {
-            ok: result.is_ok(),
-            error: result.err(),
-            password: read_password(&app),
-            url: local_url(&app),
-            log: log_path.display().to_string(),
-        };
-        INSTALLING.store(false, Ordering::SeqCst);
-        let _ = app.emit("install-done", done);
-    });
-}
-
-fn install(app: &AppHandle, log_path: &Path) -> Result<(), String> {
-    let log = Arc::new(Mutex::new(File::create(log_path).map_err(|e| format!("無法寫入 {}：{e}", log_path.display()))?));
-    let say = |line: &str| {
-        let _ = writeln!(log.lock().unwrap(), "{line}");
-        let _ = app.emit("install-log", line.to_string());
-    };
-
-    say("檢查 Node.js…");
-    let v = node_version()?;
-    say(&format!("Node.js {v}"));
-
-    let state = app.state::<AppState>();
-    state.server.stop();
-
-    let src = app.path().resource_dir().map_err(|e| e.to_string())?.join("server-app");
-    let dest = app_dir(app);
-    say(&format!("複製 server 檔案到 {}…", dest.display()));
-    if dest.exists() {
-        fs::remove_dir_all(&dest).map_err(|e| format!("無法清掉舊的 server 檔案（還有程式在用嗎？）：{e}"))?;
-    }
-    copy_dir(&src, &dest).map_err(|e| format!("複製 server 檔案失敗：{e}"))?;
-
-    say("下載相依套件（npm ci --omit=dev），第一次會花一點時間…");
+fn run_npm(app: &AppHandle, log: &Arc<Mutex<File>>, dest: &Path, args: &[&str]) -> Result<(), String> {
+    let mut full_args = vec!["/C", "npm"];
+    full_args.extend_from_slice(args);
     let mut child = hidden("cmd")
-        .args(["/C", "npm", "ci", "--omit=dev", "--no-audit", "--no-fund"])
-        .current_dir(&dest)
+        .args(&full_args)
+        .current_dir(dest)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -317,7 +374,81 @@ fn install(app: &AppHandle, log_path: &Path) -> Result<(), String> {
         let _ = r.join();
     }
     if !status.success() {
-        return Err(format!("npm ci 失敗（{status}）。常見原因：沒有網路、公司代理擋住 npm registry。"));
+        return Err(format!("npm 執行失敗（{status}）。常見原因：沒有網路、公司代理擋住 npm registry。"));
+    }
+    Ok(())
+}
+
+fn spawn_task<F>(app: AppHandle, task: F)
+where
+    F: FnOnce(&AppHandle, &Path) -> Result<(), String> + Send + 'static,
+{
+    if INSTALLING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    thread::spawn(move || {
+        let log_path = log_dir(&app).join("install.log");
+        let result = task(&app, &log_path);
+        if let Err(e) = &result {
+            note(&log_path, &format!("FAILED: {e}"));
+        }
+        let done = Done {
+            ok: result.is_ok(),
+            error: result.err(),
+            password: read_password(&app),
+            url: local_url(&app),
+            log: log_path.display().to_string(),
+        };
+        INSTALLING.store(false, Ordering::SeqCst);
+        let _ = app.emit("install-done", done);
+    });
+}
+
+/// Install (or update/reinstall) the server on this PC. Progress goes out as
+/// `install-log` events and the outcome as one `install-done` event.
+pub fn start_install(app: AppHandle, force: bool) {
+    spawn_task(app, move |a, log_path| install(a, log_path, force));
+}
+
+/// Update `@anthropic-ai/claude-agent-sdk` in place inside `server-app` without modifying
+/// `package.json` or `package-lock.json`, stopping and restarting the local server cleanly.
+pub fn start_sdk_update(app: AppHandle) {
+    spawn_task(app, sdk_update);
+}
+
+fn install(app: &AppHandle, log_path: &Path, force: bool) -> Result<(), String> {
+    let log = Arc::new(Mutex::new(File::create(log_path).map_err(|e| format!("無法寫入 {}：{e}", log_path.display()))?));
+    let say = |line: &str| {
+        let _ = writeln!(log.lock().unwrap(), "{line}");
+        let _ = app.emit("install-log", line.to_string());
+    };
+
+    say("檢查 Node.js…");
+    let v = node_version()?;
+    say(&format!("Node.js {v}"));
+
+    let state = app.state::<AppState>();
+    state.server.stop();
+
+    let src = bundled_src_dir(app)?;
+    let dest = app_dir(app);
+    // Check before overwriting dest/package-lock.json so we compare against what is actually installed.
+    let skip_npm = !force && deps_up_to_date(&src, &dest);
+
+    if !skip_npm {
+        fs::create_dir_all(&dest).map_err(|e| format!("建立 server 目錄失敗：{e}"))?;
+        let _ = fs::write(dest.join(".deps-failed"), b"pending");
+    }
+
+    say(&format!("更新 server 檔案到 {}…", dest.display()));
+    copy_bundled_files(&src, &dest)?;
+
+    if skip_npm {
+        say("相依套件版本未變更，沿用現有的 Claude Agent SDK 與套件（跳過下載）。");
+    } else {
+        say("下載相依套件（npm ci --omit=dev），第一次會花一點時間…");
+        run_npm(app, &log, &dest, &["ci", "--omit=dev", "--no-audit", "--no-fund"])?;
+        let _ = fs::remove_file(dest.join(".deps-failed"));
     }
 
     let c = {
@@ -339,6 +470,79 @@ fn install(app: &AppHandle, log_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn sdk_update(app: &AppHandle, log_path: &Path) -> Result<(), String> {
+    let log = Arc::new(Mutex::new(File::create(log_path).map_err(|e| format!("無法寫入 {}：{e}", log_path.display()))?));
+    let say = |line: &str| {
+        let _ = writeln!(log.lock().unwrap(), "{line}");
+        let _ = app.emit("install-log", line.to_string());
+    };
+
+    let dest = app_dir(app);
+    if !server_files_present(app) {
+        return Err("本機 server 尚未安裝。".into());
+    }
+
+    say("檢查 Node.js…");
+    let v = node_version()?;
+    say(&format!("Node.js {v}"));
+
+    let state = app.state::<AppState>();
+    say("暫停本機 server 以更新 Claude Agent SDK…");
+    state.server.stop();
+
+    let _ = fs::write(dest.join(".deps-failed"), b"pending");
+    say("正在下載最新版 @anthropic-ai/claude-agent-sdk…");
+    let npm_res = run_npm(app, &log, &dest, &["install", "--no-save", "--omit=dev", "--no-audit", "--no-fund", "@anthropic-ai/claude-agent-sdk@latest"]);
+    if let Err(e) = npm_res {
+        // Bring the previous server back up so the desktop UI keeps working after a network failure.
+        state.server.start(app);
+        return Err(e);
+    }
+    let _ = fs::remove_file(dest.join(".deps-failed"));
+
+    say("重新啟動本機 server…");
+    state.server.start(app);
+    if !wait_ready(app, Duration::from_secs(30)) {
+        return Err(format!("server 30 秒內沒有回應，請看 {}", log_dir(app).join("server.log").display()));
+    }
+    say("完成。");
+    Ok(())
+}
+
+/// Update bundled server/web files in place when dependencies did not change, then start and open.
+/// Falls back to the setup page if anything fails or dependencies need reinstalling.
+pub fn update_and_open(app: &AppHandle, show: bool) {
+    let app = app.clone();
+    thread::spawn(move || {
+        let res: Result<(), String> = (|| {
+            let src = bundled_src_dir(&app)?;
+            let dest = app_dir(&app);
+            if !deps_up_to_date(&src, &dest) {
+                return Err("needs npm ci".into());
+            }
+            let state = app.state::<AppState>();
+            state.server.stop();
+            copy_bundled_files(&src, &dest)?;
+            let c = {
+                let mut c = state.config.lock().unwrap();
+                c.local = true;
+                c.url = Some(format!("http://127.0.0.1:{}", c.port));
+                c.installed_version = Some(app.package_info().version.to_string());
+                c.clone()
+            };
+            save_config(&app, &c)
+        })();
+        if res.is_ok() {
+            start_and_open(&app, show);
+        } else {
+            let a = app.clone();
+            let _ = app.run_on_main_thread(move || {
+                let _ = open_window(&a, None, true);
+            });
+        }
+    });
+}
+
 /// Start the installed server and open the window once it answers.
 pub fn start_and_open(app: &AppHandle, show: bool) {
     app.state::<AppState>().server.start(app);
@@ -357,4 +561,98 @@ pub fn start_and_open(app: &AppHandle, show: bool) {
             }
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(tag: &str) -> PathBuf {
+        let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let d = std::env::temp_dir().join(format!("imnotcc-test-{tag}-{nanos}"));
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn write_lock(dir: &Path, app_ver: &str, sdk_ver: &str, dev_ver: &str) {
+        let json = format!(
+            r#"{{
+              "name": "imnotcc",
+              "version": "{app_ver}",
+              "lockfileVersion": 3,
+              "packages": {{
+                "": {{
+                  "name": "imnotcc",
+                  "version": "{app_ver}",
+                  "dependencies": {{ "@anthropic-ai/claude-agent-sdk": "^{sdk_ver}", "express": "^5.3.0" }},
+                  "devDependencies": {{ "vite": "^{dev_ver}" }}
+                }},
+                "node_modules/@anthropic-ai/claude-agent-sdk": {{ "version": "{sdk_ver}" }},
+                "node_modules/express": {{ "version": "5.3.0" }},
+                "node_modules/vite": {{ "version": "{dev_ver}", "dev": true }}
+              }}
+            }}"#
+        );
+        fs::write(dir.join("package-lock.json"), json).unwrap();
+    }
+
+    fn seed_node_modules(dest: &Path) {
+        let nm = dest.join("node_modules");
+        fs::create_dir_all(nm.join("@anthropic-ai").join("claude-agent-sdk")).unwrap();
+        fs::create_dir_all(nm.join("express")).unwrap();
+        fs::write(nm.join(".package-lock.json"), "{}").unwrap();
+        fs::write(nm.join("@anthropic-ai").join("claude-agent-sdk").join("package.json"), "{}").unwrap();
+        fs::write(nm.join("express").join("package.json"), "{}").unwrap();
+    }
+
+    #[test]
+    fn deps_stay_valid_across_app_and_dev_bumps() {
+        let root = temp_dir("deps");
+        let src = root.join("src");
+        let dest = root.join("dest");
+        fs::create_dir_all(&src).unwrap();
+        fs::create_dir_all(&dest).unwrap();
+
+        write_lock(&dest, "0.3.1", "0.3.325", "8.3.8");
+        seed_node_modules(&dest);
+        write_lock(&src, "0.3.2", "0.3.325", "8.4.0");
+        assert!(deps_up_to_date(&src, &dest));
+
+        // Bumping a production dependency invalidates deps_up_to_date.
+        write_lock(&src, "0.3.2", "0.3.326", "8.4.0");
+        assert!(!deps_up_to_date(&src, &dest));
+
+        // Restoring matching lockfile passes unless .deps-failed exists.
+        write_lock(&src, "0.3.2", "0.3.325", "8.4.0");
+        assert!(deps_up_to_date(&src, &dest));
+        fs::write(dest.join(".deps-failed"), b"pending").unwrap();
+        assert!(!deps_up_to_date(&src, &dest));
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn copy_bundled_files_preserves_node_modules() {
+        let root = temp_dir("copy");
+        let src = root.join("src");
+        let dest = root.join("dest");
+        fs::create_dir_all(src.join("server")).unwrap();
+        fs::create_dir_all(src.join("dist")).unwrap();
+        fs::write(src.join("server").join("index.js"), "new-server").unwrap();
+        fs::write(src.join("dist").join("index.html"), "new-dist").unwrap();
+        fs::write(src.join("package.json"), "{}").unwrap();
+        fs::write(src.join("package-lock.json"), "{}").unwrap();
+
+        seed_node_modules(&dest);
+        fs::create_dir_all(dest.join("server")).unwrap();
+        fs::write(dest.join("server").join("stale.js"), "old").unwrap();
+
+        copy_bundled_files(&src, &dest).unwrap();
+        assert_eq!(fs::read_to_string(dest.join("server").join("index.js")).unwrap(), "new-server");
+        assert!(!dest.join("server").join("stale.js").exists());
+        assert!(dest.join("node_modules").join("@anthropic-ai").join("claude-agent-sdk").join("package.json").is_file());
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

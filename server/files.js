@@ -99,7 +99,7 @@ function previewLink(file) {
   return `/preview/${token}/${encodeURIComponent(path.basename(file))}`;
 }
 
-const describe = (f) => ({ path: f.shown, name: path.basename(f.real), kind: f.kind, size: f.stat.size, mtime: f.stat.mtimeMs });
+const describe = (f) => ({ path: f.shown, hostPath: f.real, name: path.basename(f.real), kind: f.kind, size: f.stat.size, mtime: f.stat.mtimeMs });
 
 export function fileRoutes(app, { requireSession, wrap }) {
   // Which of the paths a reply names exist. Those that do not come back as null, so the chat

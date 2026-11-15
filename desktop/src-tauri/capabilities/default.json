@@ -26,6 +26,8 @@
     "allow-get-state",
     "allow-use-remote",
     "allow-install-local",
+    "allow-update-sdk",
+    "allow-resume-current",
     "allow-open-url",
     "allow-open-node-download",
     "allow-save-local-settings",
@@ -33,6 +35,7 @@
     "allow-restart-local",
     "allow-open-data-dir",
     "allow-open-log-dir",
+    "allow-reveal-file",
     "allow-open-setup",
     "allow-open-external",
     "allow-show-password"

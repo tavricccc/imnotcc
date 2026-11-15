@@ -6,6 +6,8 @@ import { Button } from "./button";
 import { Skeleton } from "./feedback";
 import { Panel } from "./panel";
 
+export const SettingsEmbeddedContext = React.createContext(false);
+
 /** Pins a page's top row under the status bar while the page scrolls beneath it. */
 // Pinned at the offset it starts at, so it never shifts when the page begins to scroll.
 export const pinnedHeaderClass = "sticky top-[calc(var(--safe-top)+1.5rem)] z-30 md:top-10";
@@ -24,28 +26,32 @@ export function PageHeader({ actions, back, className, description, title }: {
   description?: React.ReactNode;
   title: React.ReactNode;
 }) {
+  const embedded = React.useContext(SettingsEmbeddedContext);
   const titleRef = React.useRef<HTMLHeadingElement>(null);
   const [collapsed, setCollapsed] = React.useState(false);
   React.useEffect(() => {
+    if (embedded) return;
     const title = titleRef.current;
     if (!title) return;
     const observer = new IntersectionObserver(([entry]) => setCollapsed(!entry.isIntersecting && entry.boundingClientRect.top < 0));
     observer.observe(title);
     return () => observer.disconnect();
-  }, []);
+  }, [embedded]);
   return (
     <>
+    {embedded ? null : (
     <div
       aria-hidden
       className={cn(
-        "pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[calc(var(--safe-top)+2.75rem)] items-end justify-center px-16 pb-2.5 transition-[opacity,translate] duration-[var(--motion-control)] ease-[var(--ease-move)] md:left-[var(--desktop-inset,0px)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)] md:h-[calc(var(--safe-top)+3.5rem)]",
+        "pointer-events-none fixed inset-x-0 top-0 z-30 flex h-[calc(var(--safe-top)+2.75rem)] items-end justify-center px-16 pb-2.5 transition-[opacity,translate] duration-[var(--motion-control)] ease-[var(--ease-move)] md:top-[var(--safe-top)] md:left-[var(--desktop-inset,0px)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)] md:h-12",
         collapsed ? "opacity-100" : "-translate-y-1 opacity-0",
       )}
     >
       <span className="truncate text-[0.9375rem] font-semibold">{title}</span>
     </div>
+    )}
     <header className={cn("grid gap-4", className)}>
-      {back ? (
+      {back && !embedded ? (
         <Button aria-label={back.label} className="justify-self-start" onClick={() => goBack(back.href)} size="icon-sm">
           <CaretLeft weight="bold" />
         </Button>

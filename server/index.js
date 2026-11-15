@@ -7,7 +7,7 @@ import os from 'node:os';
 import express from 'express';
 import { WebSocketServer } from 'ws';
 import { forkSession, getSessionInfo, getSessionMessages, renameSession } from '@anthropic-ai/claude-agent-sdk';
-import { DEV, DIST_DIR, PORT } from './config.js';
+import { DEV, DIST_DIR, PORT, ROOT } from './config.js';
 import * as store from './state.js';
 import * as auth from './auth.js';
 import * as runners from './runner.js';
@@ -55,7 +55,8 @@ app.post('/api/password', (req, res) => {
   const { current, next } = req.body ?? {};
   if (!auth.checkPassword(current)) return res.status(401).json({ error: '目前的密碼不對。' });
   if (typeof next !== 'string' || next.length < 8) return res.status(400).json({ error: '新密碼至少 8 個字元。' });
-  auth.setPassword(next);
+  auth.setPassword(next, { changed: true });
+  auth.removePasswordFile();
   auth.issueCookie(res, httpsRequest(req));
   res.json({ ok: true });
 });
@@ -295,6 +296,47 @@ app.get('/api/controls', async (_req, res) => {
   try { res.json({ controls: await runners.probeControls(os.homedir()) }); }
   catch (e) { res.json({ controls: null, error: String(e?.message ?? e) }); }
 });
+
+const SDK_PKG = '@anthropic-ai/claude-agent-sdk';
+const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+function isNewerVersion(latest, current) {
+  if (!latest || !current || latest === current) return false;
+  const parse = (v) => {
+    const [core, pre = ''] = String(v).trim().replace(/^v/, '').split('-', 2);
+    return { nums: core.split('.').map((n) => Number.parseInt(n, 10) || 0), pre };
+  };
+  const a = parse(latest);
+  const b = parse(current);
+  for (let i = 0; i < Math.max(a.nums.length, b.nums.length); i++) {
+    const diff = (a.nums[i] ?? 0) - (b.nums[i] ?? 0);
+    if (diff !== 0) return diff > 0;
+  }
+  if (!a.pre && b.pre) return true;
+  if (a.pre && !b.pre) return false;
+  return a.pre > b.pre;
+}
+
+app.get('/api/sdk', wrap(async (req, res) => {
+  const installed = readJson(path.join(ROOT, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'package.json'));
+  const rootPkg = readJson(path.join(ROOT, 'package.json'));
+  const current = installed?.version ?? null;
+  const declared = rootPkg?.dependencies?.[SDK_PKG] ?? null;
+  if (req.query.check !== '1') {
+    return res.json({ current, declared, latest: null, updateAvailable: false });
+  }
+  try {
+    const r = await fetch(`https://registry.npmjs.org/${encodeURIComponent(SDK_PKG)}/latest`, {
+      headers: { accept: 'application/json' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) throw new Error(`npm registry HTTP ${r.status}`);
+    const meta = await r.json();
+    const latest = typeof meta?.version === 'string' ? meta.version : null;
+    res.json({ current, declared, latest, updateAvailable: !!(latest && current && isNewerVersion(latest, current)) });
+  } catch (e) {
+    res.json({ current, declared, latest: null, updateAvailable: false, checkError: String(e?.message ?? e) });
+  }
+}));
 
 pluginRoutes(app, wrap);
 pushRoutes(app);

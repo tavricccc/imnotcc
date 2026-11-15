@@ -11,6 +11,7 @@ import { ClaudeLoginWatcher } from "@/components/claude-login";
 import { useStore } from "@/lib/store-core";
 import { Toaster } from "@/ui/feedback";
 import { Lightbox } from "@/components/lightbox";
+import { SettingsDialog, type SettingsSection } from "@/components/settings-dialog";
 import { Titlebar } from "@/components/titlebar";
 import { Pane, useStepDirection } from "@/ui/pane";
 import { useCompactViewport } from "@/ui/use-compact-viewport";
@@ -25,7 +26,7 @@ import { CompactPage, GlobalPage, DefaultsPage, FoldersPage, SettingsPage } from
 import { parseRoute, type Screen } from "./routes";
 import { AppShell } from "./shell";
 
-function ScreenView({ screen }: { screen: Screen }) {
+function ScreenView({ onOpenSettings, screen }: { onOpenSettings: () => void; screen: Screen }) {
   switch (screen.name) {
     case "plugins": return <PluginsPage />;
     case "plugin-browse": return <PluginBrowsePage />;
@@ -36,7 +37,7 @@ function ScreenView({ screen }: { screen: Screen }) {
     case "settings-compact": return <CompactPage />;
     case "settings-global": return <GlobalPage />;
     case "app-settings": return <AppSettingsPage />;
-    default: return <SessionsPage />;
+    default: return <SessionsPage onOpenSettings={onOpenSettings} />;
   }
 }
 
@@ -74,11 +75,12 @@ export function App() {
   const { sessionSidebarCollapsed } = useStore(prefs);
   const [sessionRevision, setSessionRevision] = React.useState(0);
   const [firstPrompt, setFirstPrompt] = React.useState<FirstPrompt>();
+  const [settingsSection, setSettingsSection] = React.useState<SettingsSection | null>(null);
   const newSession = route.screen.name === "new-session" ? route.screen : undefined;
   const sessionScreen = route.screen.name === "sessions" || route.screen.name === "chat" || !!newSession;
-  const desktopSessions = !compact && sessionScreen;
+  const desktopSessions = !compact;
   const sessionId = route.screen.name === "chat" ? route.screen.id : undefined;
-  const showDraft = !!newSession || (desktopSessions && !sessionId);
+  const showDraft = !!newSession || (!compact && route.screen.name === "sessions");
   const toggleSessions = () => prefs.set({ sessionSidebarCollapsed: !sessionSidebarCollapsed });
 
   React.useEffect(() => {
@@ -99,21 +101,26 @@ export function App() {
       setFirstPrompt(prompt);
       navigate(`/s/${prompt.id}`, { replace: !!newSession });
     }} />
-  ) : <ScreenView screen={route.screen} />;
+  ) : <ScreenView onOpenSettings={() => setSettingsSection("app")} screen={route.screen} />;
   return (
     <>
-      <Titlebar />
+      <Titlebar sidebar={desktopSessions ? { collapsed: sessionSidebarCollapsed, toggle: toggleSessions } : undefined} />
       <ClaudeLoginWatcher />
       <StorageWatcher />
-      <AppShell active={route.tab} bare={!!sessionId || showDraft} dock={route.depth === 0} sessions={desktopSessions ? {
+      <AppShell bare={!!sessionId || showDraft} sessions={desktopSessions ? {
         collapsed: sessionSidebarCollapsed,
-        content: <SessionsPage activeId={sessionId} revision={sessionRevision} sidebar />,
+        content: <SessionsPage activeId={sessionId} onOpenSettings={() => setSettingsSection("app")} onToggleSidebar={toggleSessions} revision={sessionRevision} sidebar />,
         toggle: toggleSessions,
       } : undefined}>
         {sessionId ? screen : (
-          <Pane direction={desktopSessions ? 0 : direction} step={desktopSessions ? "session-workspace" : path}>{screen}</Pane>
+          <Pane direction={sessionScreen && !compact ? 0 : direction} step={sessionScreen && !compact ? "session-workspace" : path}>{screen}</Pane>
         )}
       </AppShell>
+      <SettingsDialog
+        onOpenChange={(open) => { if (!open) setSettingsSection(null); }}
+        onSectionChange={setSettingsSection}
+        section={settingsSection}
+      />
       <Toaster />
       <Lightbox />
     </>

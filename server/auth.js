@@ -10,24 +10,48 @@ const COOKIE = 'ccr';
 const MAX_AGE_S = 60 * 60 * 24 * 30;
 const hashOf = (password, salt) => crypto.scryptSync(password, salt, 32).toString('hex');
 
+const PASSWORD_FILE = () => path.join(DATA_DIR, 'password.txt');
+
+export function removePasswordFile() {
+  try { fs.unlinkSync(PASSWORD_FILE()); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+}
+
 // First start: take IMNOTCC_PASSWORD, or make one and leave it in data/password.txt.
 export function ensureAuth() {
   const s = store.get();
-  if (s.auth) return;
+  if (s.auth) {
+    // Clean up stale password.txt if the user already changed their password previously.
+    const file = PASSWORD_FILE();
+    if (fs.existsSync(file)) {
+      let matches = false;
+      try {
+        const raw = fs.readFileSync(file, 'utf8').trim();
+        matches = !!raw && checkPassword(raw);
+      } catch {}
+      if (!matches) {
+        try { fs.unlinkSync(file); } catch {}
+        if (!s.auth.changed) {
+          s.auth.changed = true;
+          store.save();
+        }
+      }
+    }
+    return;
+  }
   let password = process.env.IMNOTCC_PASSWORD;
   if (!password) {
     password = crypto.randomBytes(9).toString('base64url');
-    fs.writeFileSync(path.join(DATA_DIR, 'password.txt'), `${password}\n`, { mode: 0o600 });
-    console.log(`[imnotcc] new password written to ${path.join(DATA_DIR, 'password.txt')}`);
+    fs.writeFileSync(PASSWORD_FILE(), `${password}\n`, { mode: 0o600 });
+    console.log(`[imnotcc] new password written to ${PASSWORD_FILE()}`);
   }
   setPassword(password);
 }
 
-export function setPassword(password) {
+export function setPassword(password, { changed = false } = {}) {
   const s = store.get();
   const salt = crypto.randomBytes(16).toString('hex');
   // A new secret signs every existing login out.
-  s.auth = { salt, hash: hashOf(password, salt), secret: crypto.randomBytes(32).toString('hex') };
+  s.auth = { salt, hash: hashOf(password, salt), secret: crypto.randomBytes(32).toString('hex'), ...(changed ? { changed: true } : {}) };
   store.save();
 }
 

@@ -1,6 +1,7 @@
 import * as React from "react";
-import { ArrowUp, FolderSimple, FolderSimplePlus, HardDrives, LinuxLogo, Plus, WindowsLogo } from "@phosphor-icons/react/ssr";
+import { ArrowUp, FolderSimple, FolderSimplePlus, GearSix, HardDrives, LinuxLogo, NotePencil, Plus, SidebarSimple, WindowsLogo } from "@phosphor-icons/react/ssr";
 import { get, post } from "@/lib/api";
+import { isTauri } from "@/lib/tauri";
 import { navigate } from "@/lib/app-navigation";
 import { ago, baseName, until } from "@/lib/format";
 import { onGlobal } from "@/lib/socket";
@@ -31,7 +32,13 @@ const environments: SegmentedOption<Env>[] = [
   { value: "wsl", label: ENV_LABEL.wsl, icon: <LinuxLogo /> },
 ];
 
-export function SessionsPage({ activeId, revision = 0, sidebar = false }: { activeId?: string; revision?: number; sidebar?: boolean }) {
+export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revision = 0, sidebar = false }: {
+  activeId?: string;
+  onOpenSettings?: () => void;
+  onToggleSidebar?: () => void;
+  revision?: number;
+  sidebar?: boolean;
+}) {
   const { plan, running } = useStore(shared);
   const { data, error, reload: load } = useSessions();
   const { groups, recent = [] } = data ?? {};
@@ -84,6 +91,7 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
   const actions = (
     <>
       <UsageRing label={five == null && seven == null ? "方案用量" : `方案用量：5 小時 ${five ?? "–"}%，每週 ${seven ?? "–"}%`} onClick={() => void openUsage()} pct={five == null && seven == null ? null : Math.max(five ?? 0, seven ?? 0)} />
+      {!sidebar && onOpenSettings ? <Button aria-label="設定" onClick={onOpenSettings} size="icon"><GearSix /></Button> : null}
       {sidebar ? null : <Button aria-label="新增對話" onClick={() => openDraft()} size="icon" variant="primary"><Plus weight="bold" /></Button>}
     </>
   );
@@ -96,7 +104,7 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
       return (
         <li key={s.id}>
           <AppLink aria-current={s.id === activeId ? "page" : undefined}
-            className={cn("flex min-h-9 items-center gap-2 rounded-tile py-1 pr-2 text-sm outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)]", s.temporary ? "pl-2" : "pl-7", s.id === activeId && "bg-surface-pressed font-medium hover:bg-surface-pressed")}
+            className={cn("flex min-h-9 items-center gap-2 rounded-tile py-1 pr-2 text-sm outline-none transition-colors duration-[var(--motion-control)] ease-[var(--ease-move)] hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)]", s.temporary ? "pl-2" : "pl-7", s.id === activeId && "bg-surface-pressed font-medium hover:bg-surface-pressed")}
             href={href} title={title}>
             <span className="min-w-0 flex-1 truncate">{title}</span>
             {isRunning ? <span aria-label="執行中" className="pulse-dot !bg-positive" role="img" /> : null}
@@ -110,20 +118,36 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
     );
   }
 
+  const sidebarNavClass = (current: boolean) => cn(
+    "flex h-8.5 items-center gap-2.5 rounded-tile px-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--focus-ring)]",
+    current ? "bg-surface-pressed text-ink" : "text-ink-muted hover:bg-surface-raised hover:text-ink",
+  );
+
   return (
     <div className={sidebar ? "flex h-full min-h-0 flex-col" : "grid grid-cols-[minmax(0,1fr)] gap-6"}>
-      <div className={sidebar ? "grid shrink-0 gap-3 px-3 pb-3 pt-[calc(var(--safe-top)+1rem)]" : "contents"}>
+      <div className={sidebar ? "grid shrink-0 gap-1 px-2.5 pb-2 pt-[calc(var(--safe-top)+0.5rem)]" : "contents"}>
         {sidebar ? (
-          <header className="flex items-center justify-between gap-2 pl-1">
-            <h2 className="text-base font-semibold">Session</h2>
-            <div className="flex items-center gap-1">{actions}</div>
-          </header>
+          <>
+            {!isTauri() && onToggleSidebar ? (
+              <div className="mb-1 flex items-center justify-between px-1.5">
+                <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-ink-muted">
+                  <img alt="" className="size-4 rounded-[22.37%]" src="/icon.svg" />
+                  <span>imnotcc</span>
+                </div>
+                <Button aria-label="收起側邊欄" onClick={onToggleSidebar} size="icon-sm" variant="ghost">
+                  <SidebarSimple size={16} weight="fill" />
+                </Button>
+              </div>
+            ) : null}
+            <button className={cn(sidebarNavClass(false), "w-full text-left")} onClick={() => openDraft()} type="button">
+              <NotePencil className="size-4 shrink-0" />
+              <span>新增對話</span>
+            </button>
+          </>
         ) : <PageHeader actions={actions} title="對話" />}
 
-        {sidebar ? <Button className="justify-start px-2" onClick={() => openDraft()} size="sm" variant="ghost"><Plus weight="bold" />新增對話</Button> : null}
-
         {canSwitch ? (
-          <Segmented className={sidebar ? "[&_[role=tablist]]:overflow-x-hidden [&_[role=tab]]:px-3" : undefined} label="執行環境" onChange={(value) => prefs.set({ sessionEnvironment: value })} options={environments} value={env} />
+          <Segmented className={sidebar ? "mt-1.5 [&_[role=tablist]]:overflow-x-hidden [&_[role=tab]]:px-3" : undefined} label="執行環境" onChange={(value) => prefs.set({ sessionEnvironment: value })} options={environments} value={env} />
         ) : null}
       </div>
 
@@ -167,6 +191,20 @@ export function SessionsPage({ activeId, revision = 0, sidebar = false }: { acti
           </div>
         )}
       </div>
+
+      {sidebar ? (
+        <footer className="flex shrink-0 items-center justify-between gap-2 px-2.5 py-2.5">
+          <button className={cn(sidebarNavClass(false), "flex-1 text-left")} onClick={onOpenSettings} type="button">
+            <GearSix className="size-4 shrink-0" />
+            <span>設定</span>
+          </button>
+          <UsageRing
+            label={five == null && seven == null ? "方案用量" : `方案用量：5 小時 ${five ?? "–"}%，每週 ${seven ?? "–"}%`}
+            onClick={() => void openUsage()}
+            pct={five == null && seven == null ? null : Math.max(five ?? 0, seven ?? 0)}
+          />
+        </footer>
+      ) : null}
 
       <Sheet onOpenChange={setUsageOpen} open={usageOpen} title="方案用量">
         <div className="grid gap-5 pb-2">

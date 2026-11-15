@@ -1,5 +1,5 @@
-// The preview panel: one file, or one file's change in a turn. On a wide screen it stands at the
-// right edge, the window's full height, and pushes the chat over; narrower, it is a sheet.
+// The preview panel: one file, or one file's change in a turn. On a wide screen it floats inside
+// the right edge of the main card and shifts the chat column over; narrower, it is a sheet.
 import * as React from "react";
 import { Code, Eye, X } from "@phosphor-icons/react/ssr";
 import { useStore } from "@/lib/store-core";
@@ -60,7 +60,14 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
   React.useEffect(() => {
     document.documentElement.style.setProperty("--preview-width", `${shown}px`);
   }, [shown]);
-  React.useEffect(() => () => { document.documentElement.style.removeProperty("--preview-width"); }, []);
+  React.useEffect(() => {
+    if (dragging === null) document.documentElement.style.removeProperty("--preview-motion");
+    else document.documentElement.style.setProperty("--preview-motion", "0ms");
+  }, [dragging]);
+  React.useEffect(() => () => {
+    document.documentElement.style.removeProperty("--preview-width");
+    document.documentElement.style.removeProperty("--preview-motion");
+  }, []);
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !e.defaultPrevented) closePreview(); };
     window.addEventListener("keydown", onKey);
@@ -73,7 +80,7 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
     setDragging(null);
   };
   return (
-    <aside aria-label="預覽" className="preview-in fixed inset-y-0 right-0 z-40 flex p-3 pl-0" style={{ width: shown }}>
+    <aside aria-label="預覽" className="preview-in absolute inset-y-0 right-0 z-40 flex p-3 pl-0" style={{ width: shown }}>
       <div aria-label="調整預覽寬度" aria-orientation="vertical" aria-valuenow={shown}
         className="w-3 shrink-0 touch-none cursor-col-resize rounded-full outline-none hover:bg-accent-soft focus-visible:bg-accent-soft active:bg-accent-soft"
         onKeyDown={(e) => {
@@ -94,7 +101,7 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
         }}
         onPointerUp={finish}
         role="separator" tabIndex={0} />
-      <div className="flex min-w-0 flex-1 flex-col overflow-clip rounded-panel border border-line bg-surface-solid shadow-float">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-panel border border-line bg-surface-solid shadow-float">
         <header className="flex shrink-0 items-start gap-2 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1 pt-1"><Title file={file} source={source} target={target} toggleSource={toggleSource} /></div>
           <Button aria-label="關閉預覽" onClick={closePreview} size="icon-sm" variant="ghost"><X weight="bold" /></Button>
@@ -124,7 +131,7 @@ function Title({ file, source, target, toggleSource }: { file: FileState; source
         </Button>
       ) : null}
       {target.kind === "file" && file.data?.kind === "html" ? <OpenPage path={target.path} session={target.session} />
-        : target.kind === "file" && file.data && file.data.kind !== "dir" ? <OpenRaw kind={file.data.kind} name={file.data.name} path={target.path} session={target.session} /> : null}
+        : target.kind === "file" && file.data && file.data.kind !== "dir" ? <OpenRaw hostPath={file.data.hostPath} kind={file.data.kind} name={file.data.name} path={target.path} session={target.session} size={file.data.size} /> : null}
     </div>
   );
 }

@@ -4,18 +4,20 @@ import * as React from "react";
 import DOMPurify from "dompurify";
 import { marked } from "marked";
 import { toast } from "sonner";
-import { ArrowSquareOut, DownloadSimple, Globe } from "@phosphor-icons/react/ssr";
+import { ArrowSquareOut, DownloadSimple, FolderOpen, Globe } from "@phosphor-icons/react/ssr";
 import { get, post } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { looksLikePath, parseRef, type FileKind } from "@/lib/file-mentions";
 import { openPreview } from "@/lib/preview";
+import { tauriInvoke, useIsLocalHost } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { highlightLines } from "@/lib/highlight";
 import type { ThemedToken } from "shiki/core";
 import { Button } from "@/ui/button";
+import { ProgressBar } from "@/ui/feedback";
 import { ErrorState, LoadingList } from "@/ui/page";
 
-export interface FileData { path: string; name: string; kind: FileKind; size: number; mtime: number; text?: string; tooLarge?: boolean }
+export interface FileData { path: string; hostPath?: string; name: string; kind: FileKind; size: number; mtime: number; text?: string; tooLarge?: boolean }
 
 export const fileUrl = (session: string, kind: "file" | "raw", path: string) =>
   `/api/sessions/${encodeURIComponent(session)}/${kind}?path=${encodeURIComponent(path)}`;
@@ -46,12 +48,128 @@ export function FileBody({ file: { data, error }, line, session, source }: { fil
   return <CodeView line={line} name={data.name} text={data.text} />;
 }
 
+async function revealInExplorer(targetPath: string) {
+  try {
+    await tauriInvoke("reveal_file", { path: targetPath });
+  } catch (e) {
+    toast.error(e instanceof Error ? e.message : String(e));
+  }
+}
+
+interface DownloadProgress { active: boolean; loaded: number; total: number; url: string }
+
+function downloadLabel(name: string, loaded: number, total: number) {
+  if (total > 0) {
+    const pct = Math.min(100, Math.round((loaded / total) * 100));
+    return `下載中 ${name} · ${pct}%（${formatBytes(loaded)} / ${formatBytes(total)}）`;
+  }
+  return loaded > 0 ? `下載中 ${name}（${formatBytes(loaded)}）` : `準備下載 ${name}…`;
+}
+
+/** Streams a remote file with live byte progress and triggers a browser/WebView save when done. */
+function useFileDownload({ name, size, url }: { name: string; size?: number; url: string }) {
+  const [state, setState] = React.useState<DownloadProgress>({ active: false, loaded: 0, total: 0, url: "" });
+  const mounted = React.useRef(true);
+  const busy = React.useRef(false);
+  React.useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
+  const start = React.useCallback(async () => {
+    if (busy.current) return;
+    busy.current = true;
+    const expected = size ?? 0;
+    const toastId = toast.loading(`準備下載 ${name}…`);
+    if (mounted.current) setState({ active: true, loaded: 0, total: expected, url });
+    try {
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const body = await res.json() as { error?: string };
+          if (body?.error) msg = body.error;
+        } catch { /* non-JSON error body */ }
+        throw new Error(msg);
+      }
+      const total = Number(res.headers.get("Content-Length")) || expected;
+      const mime = res.headers.get("Content-Type") || "application/octet-stream";
+      let blob: Blob;
+      if (res.body) {
+        const reader = res.body.getReader();
+        const chunks: BlobPart[] = [];
+        let loaded = 0;
+        let lastTick = 0;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            chunks.push(value);
+            loaded += value.byteLength;
+            const now = Date.now();
+            if (now - lastTick >= 80) {
+              lastTick = now;
+              toast.loading(downloadLabel(name, loaded, total), { id: toastId });
+              if (mounted.current) setState({ active: true, loaded, total, url });
+            }
+          }
+        }
+        toast.loading(downloadLabel(name, loaded, total || loaded), { id: toastId });
+        if (mounted.current) setState({ active: true, loaded, total: total || loaded, url });
+        blob = new Blob(chunks, { type: mime });
+      } else {
+        blob = await res.blob();
+      }
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = name;
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(href), 10_000);
+      toast.success(`已下載 ${name}`, { id: toastId });
+    } catch (e) {
+      toast.error(`下載失敗：${e instanceof Error ? e.message : String(e)}`, { id: toastId });
+    } finally {
+      busy.current = false;
+      if (mounted.current) setState({ active: false, loaded: 0, total: 0, url: "" });
+    }
+  }, [name, size, url]);
+
+  const active = state.active && state.url === url;
+  const pct = active && state.total > 0 ? Math.min(100, Math.round((state.loaded / state.total) * 100)) : null;
+  return { active, loaded: state.loaded, total: state.total, pct, start };
+}
+
 function FileFacts({ data, raw }: { data: FileData; raw: string }) {
+  const isHost = useIsLocalHost();
+  const dl = useFileDownload({ name: data.name, size: data.size, url: raw });
   return (
     <div className="grid justify-items-start gap-3 py-6 text-sm text-ink-muted">
       <p>{data.tooLarge ? "檔案太大，不在這裡顯示。" : "這個檔案不是文字，沒辦法預覽。"}</p>
       <p>{formatBytes(data.size)} · {new Date(data.mtime).toLocaleString()}</p>
-      <Button asChild size="sm"><a download={data.name} href={raw}><DownloadSimple />下載</a></Button>
+      {isHost ? (
+        <Button onClick={() => void revealInExplorer(data.hostPath || data.path)} size="sm">
+          <FolderOpen />在檔案總管顯示
+        </Button>
+      ) : (
+        <div className="grid w-full max-w-xs justify-items-start gap-2">
+          <Button onClick={() => void dl.start()} size="sm" status={dl.active ? "loading" : "idle"}>
+            {dl.active ? null : <DownloadSimple />}
+            {dl.active ? (dl.pct !== null ? `下載中 ${dl.pct}%` : "下載中…") : "下載"}
+          </Button>
+          {dl.active ? (
+            <div className="grid w-full gap-1">
+              {dl.total > 0 ? <ProgressBar label={`下載 ${data.name}`} value={dl.loaded / dl.total} /> : null}
+              <span className="text-xs tabular-nums text-ink-muted">
+                {dl.total > 0 ? `${formatBytes(dl.loaded)} / ${formatBytes(dl.total)} · ${dl.pct}%` : formatBytes(dl.loaded)}
+              </span>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -113,15 +231,34 @@ function MarkdownFile({ data, session }: { data: FileData; session: string }) {
   );
 }
 
-/** Images and PDFs open in a new tab (a PDF reads better there on a phone); anything else downloads. */
-export function OpenRaw({ kind, name, path, session }: { kind: FileKind; name: string; path: string; session: string }) {
+/** On Host, reveals the file in File Explorer; on Remote, opens images/PDFs or downloads with progress. */
+export function OpenRaw({ hostPath, kind, name, path, session, size }: { hostPath?: string; kind: FileKind; name: string; path: string; session: string; size?: number }) {
+  const isHost = useIsLocalHost();
+  const raw = fileUrl(session, "raw", path);
+  const dl = useFileDownload({ name, size, url: raw });
   const inline = kind === "image" || kind === "pdf";
-  const label = inline ? "在新分頁開啟" : "下載";
+
+  if (isHost) {
+    const label = "在檔案總管顯示";
+    return (
+      <Button aria-label={label} onClick={() => void revealInExplorer(hostPath || path)} size="icon-sm" title={label} variant="ghost">
+        <FolderOpen />
+      </Button>
+    );
+  }
+
+  if (inline) {
+    return (
+      <Button asChild aria-label="在新分頁開啟" size="icon-sm" title="在新分頁開啟" variant="ghost">
+        <a href={raw} rel="noopener noreferrer" target="_blank"><ArrowSquareOut /></a>
+      </Button>
+    );
+  }
+
+  const label = dl.active ? (dl.pct !== null ? `下載中 ${dl.pct}%` : "下載中…") : "下載";
   return (
-    <Button asChild aria-label={label} size="icon-sm" title={label} variant="ghost">
-      {inline
-        ? <a href={fileUrl(session, "raw", path)} rel="noopener noreferrer" target="_blank"><ArrowSquareOut /></a>
-        : <a download={name} href={fileUrl(session, "raw", path)}><DownloadSimple /></a>}
+    <Button aria-label={label} onClick={() => void dl.start()} size="icon-sm" status={dl.active ? "loading" : "idle"} title={label} variant="ghost">
+      {dl.active ? null : <DownloadSimple />}
     </Button>
   );
 }

@@ -116,16 +116,16 @@ export function NewSessionPage({ cwd, environment, onStarted }: {
   }
 
   // On a phone the page is pinned like the chat, so the keyboard moves both composers the same way.
-  return (
-    <main className={cn("mx-auto flex min-h-0 max-w-3xl flex-col px-[var(--gutter)] pt-[var(--safe-top)] md:px-8",
-      compact ? "fixed inset-x-0 top-[var(--visual-top,0px)] h-[var(--visual-height,100dvh)]" : "relative h-dvh")} ref={page}>
+  const main = (
+    <main className={cn("mx-auto flex min-h-0 max-w-3xl flex-col px-[var(--gutter)] pt-[var(--safe-top)] md:px-8 md:pt-0",
+      compact ? "fixed inset-x-0 top-[var(--visual-top,0px)] h-[var(--visual-height,100dvh)]" : "relative h-full")} ref={page}>
       {compact ? (
         <header className="flex shrink-0 items-center gap-2 pt-2">
           <Button aria-label="返回對話清單" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
           <span className="text-base font-semibold">新增對話</span>
         </header>
       ) : null}
-      <div className="grid min-h-0 flex-1 content-center justify-items-center gap-3 overflow-hidden text-center">
+      <div className="content-in grid min-h-0 flex-1 content-center justify-items-center gap-3 overflow-hidden text-center">
         <img alt="" className="size-10 rounded-icon md:size-12" src="/icon.svg" />
         <h1 className="text-xl font-semibold md:text-3xl">想讓 Claude 做什麼？</h1>
       </div>
@@ -165,5 +165,12 @@ export function NewSessionPage({ cwd, environment, onStarted }: {
       </form>
       <FolderBrowserSheet env={env} onChoose={selectProject} onOpenChange={(open) => { if (!open) setPanel(null); }} onClosed={() => projectButton.current?.focus()} open={panel === "browse"} />
     </main>
+  );
+
+  if (compact) return main;
+  return (
+    <div className="md:fixed md:inset-x-0 md:bottom-0 md:top-[var(--safe-top)] md:left-[var(--desktop-inset,0px)] md:overflow-hidden md:rounded-tl-2xl md:border-t md:border-l md:border-line md:bg-surface motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]">
+      {main}
+    </div>
   );
 }

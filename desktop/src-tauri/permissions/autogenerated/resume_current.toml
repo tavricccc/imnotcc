@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-resume-current"
+description = "Enables the resume_current command without any pre-configured scope."
+commands.allow = ["resume_current"]
+
+[[permission]]
+identifier = "deny-resume-current"
+description = "Denies the resume_current command without any pre-configured scope."
+commands.deny = ["resume_current"]

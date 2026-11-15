@@ -105,6 +105,12 @@ html {
   background-size: 100% 100%;
 }
 
+/* Tauri desktop window uses native Windows 11 Mica behind a transparent webview. */
+:root[data-tauri="1"] {
+  background-color: transparent;
+  background-image: none;
+}
+
 /* A layer covering the whole screen as the app itself (the update screen)
    wears the same canvas the startup screen stands on. */
 .launch-canvas {

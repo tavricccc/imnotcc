@@ -495,8 +495,12 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
 
   return (
     <SessionContext.Provider value={id}>
-    <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:left-[var(--desktop-inset)] motion-safe:transition-[left,right] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace} style={sidePreview ? { right: "var(--preview-width, 0px)" } : undefined}>
-      <header className="pointer-events-none relative z-30 shrink-0 px-[var(--gutter)] pt-[calc(var(--safe-top)+0.5rem)] md:px-8 md:pt-[calc(var(--safe-top)+1rem)] [&>div]:pointer-events-auto" ref={header}>
+    <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:top-[var(--safe-top)] md:left-[var(--desktop-inset)] md:h-[calc(100dvh-var(--safe-top))] md:overflow-hidden md:rounded-tl-2xl md:border-t md:border-l md:border-line md:bg-surface motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace}>
+      <div
+        className="relative flex min-h-0 flex-1 flex-col motion-safe:transition-[margin-right] motion-safe:duration-[var(--preview-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]"
+        style={sidePreview ? { marginRight: "var(--preview-width, 0px)" } : undefined}
+      >
+      <header className="pointer-events-none relative z-30 shrink-0 px-[var(--gutter)] pt-[calc(var(--safe-top)+0.5rem)] md:px-8 md:pt-4 [&>div]:pointer-events-auto" ref={header}>
         <div className="glass-float mx-auto flex max-w-3xl items-center gap-2 rounded-full p-1.5">
           <Button aria-label="返回" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
           <button className="min-w-0 flex-1 rounded-full px-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]" onClick={() => setSheet("options")} type="button">
@@ -578,6 +582,8 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       </form>
       )}
       </div>
+      </div>
+      <PreviewPanel />
 
       {/* Session options: what it runs with, then what can be done to it. */}
       <Sheet description={meta?.cwd} onOpenChange={(o) => setSheet(o ? "options" : null)} open={sheet === "options"} title={title}>
@@ -671,7 +677,6 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
         tone="danger"
       />
     </div>
-    <PreviewPanel />
     </SessionContext.Provider>
   );
 }

@@ -8,6 +8,7 @@ export interface NavItem {
   href: string;
   icon: Icon;
   label: string;
+  onClick?: () => void;
 }
 
 /**
@@ -55,7 +56,7 @@ export function PrimaryNav({
           activeIndex < 0 && "opacity-0",
         )}
       />
-      {items.map(({ badge, href, icon: ItemIcon, label: itemLabel }) => {
+      {items.map(({ badge, href, icon: ItemIcon, label: itemLabel, onClick }) => {
         const active = href === activeHref;
         return (
           <AppLink
@@ -69,6 +70,7 @@ export function PrimaryNav({
             )}
             href={href}
             key={href}
+            onClick={onClick ? (e) => { e.preventDefault(); onClick(); } : undefined}
           >
             <span aria-hidden className="relative">
               <ItemIcon className="size-5" weight={active ? "fill" : "regular"} />
