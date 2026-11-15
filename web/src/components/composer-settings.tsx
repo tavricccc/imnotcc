@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowCounterClockwise, CaretDown, CaretLeft, CaretRight, Cpu, ShieldCheck } from "@phosphor-icons/react/ssr";
+import { ArrowCounterClockwise, CaretDown, CaretRight, Check, Cpu, ShieldCheck } from "@phosphor-icons/react/ssr";
 import { EFFORTS, MODES, modeLabel } from "@/lib/format";
 import { shared, type Controls } from "@/lib/store";
 import { useStore } from "@/lib/store-core";
@@ -152,6 +152,18 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
   );
 }
 
+/** A plain menu row: the model name and a check when chosen. */
+function ModelRow({ label, onSelect, selected }: { label: string; onSelect: () => void; selected: boolean }) {
+  return (
+    <li>
+      <button aria-checked={selected} className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-ink/5" onClick={onSelect} role="radio" type="button">
+        <span className="min-w-0 flex-1 truncate text-sm">{label}</span>
+        <Check aria-hidden className={cn("size-4 shrink-0", selected ? "opacity-100" : "opacity-0")} />
+      </button>
+    </li>
+  );
+}
+
 export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMode, onModel }: {
   disabled?: boolean;
   effort: string;
@@ -174,7 +186,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
   const [view, setView] = React.useState<"effort" | "models">("effort");
   const [moreOpen, setMoreOpen] = React.useState(false);
   React.useEffect(() => { if (panel === "model") { setView("effort"); setMoreOpen(false); } }, [panel]);
-  const pickRow = (m: ModelOption) => <ChoiceRow detail={m.detail} key={m.value || "default"} label={m.label} onSelect={() => { onModel(m.value); setMoreOpen(false); setView("effort"); }} selected={model === m.value} />;
+  const pickRow = (m: ModelOption) => <ModelRow key={m.value} label={m.label} onSelect={() => { onModel(m.value); setMoreOpen(false); setView("effort"); }} selected={model === m.value} />;
   const modelTrigger = (
     <SettingButton aria-label={`模型：${modelName}${effortName ? `，Effort：${effortName}` : ""}`} className="min-w-10 max-[359px]:max-w-24" disabled={disabled}>
       <Cpu className="hidden sm:block" />
@@ -203,19 +215,15 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
         <Popover className="w-72 p-0" onOpenChange={(open) => setPanel(open ? "model" : null)} open={panel === "model"} side="top" trigger={modelTrigger}>
           <AutoHeight>
           {view === "models" ? (
-            <div className="grid max-h-[60svh] gap-2 overflow-y-auto p-3">
-              <button className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setView("effort")} type="button">
-                <CaretLeft className="size-3" weight="bold" />模型
-              </button>
-              <ListGroup label="模型" role="radiogroup">{main.map((m) => pickRow(m))}</ListGroup>
+            <div className="max-h-[60svh] overflow-y-auto p-1.5">
+              <p className="px-3 pt-1.5 pb-1 text-sm text-ink-muted">選取模型</p>
+              <ul role="radiogroup" aria-label="模型">{main.filter((m) => m.value).map((m) => pickRow(m))}</ul>
               {more.length ? (
-                <Popover align="end" className="w-64 p-0" onOpenChange={setMoreOpen} open={moreOpen} side="left" trigger={
-                  <button aria-expanded={moreOpen} className={cn("flex items-center justify-between rounded-md px-2 py-1.5 text-sm text-ink-muted hover:bg-ink/5 hover:text-ink", moreOpen && "bg-ink/5 text-ink")} type="button">
-                    更多模型（{more.length}）<CaretRight className="size-3" weight="bold" />
+                <Popover align="end" className="w-60 p-0" onOpenChange={setMoreOpen} open={moreOpen} side="left" trigger={
+                  <button aria-expanded={moreOpen} className={cn("flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-ink-muted hover:bg-ink/5 hover:text-ink", moreOpen && "bg-ink/5 text-ink")} type="button">
+                    更多模型<CaretRight className="size-3" weight="bold" />
                   </button>}>
-                  <div className="max-h-[60svh] overflow-y-auto p-3">
-                    <ListGroup label="更多模型" role="radiogroup">{more.map((m) => pickRow(m))}</ListGroup>
-                  </div>
+                  <ul aria-label="更多模型" className="max-h-[60svh] overflow-y-auto p-1.5" role="radiogroup">{more.map((m) => pickRow(m))}</ul>
                 </Popover>
               ) : null}
             </div>
