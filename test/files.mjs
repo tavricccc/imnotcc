@@ -70,6 +70,28 @@ try {
   const byName = await api('GET', `${S}/search?q=main&mode=name`);
   check('name search', byName.body?.results?.length === 1, JSON.stringify(byName.body?.results));
   check('empty search is refused', (await api('GET', `${S}/search?q=`)).status === 400);
+
+  // Uploads
+  const up = (name, body, headers = {}) => fetch(`${BASE}${S}/upload?name=${encodeURIComponent(name)}`, { method: 'POST', headers: { origin: BASE, cookie, 'content-type': 'application/octet-stream', ...headers }, body });
+  const r1 = await up('../../evil name?.log', 'hello log');
+  const u1 = await r1.json();
+  check('upload lands in .imnotcc/uploads', r1.status === 200 && u1.path.startsWith(path.join(work, '.imnotcc', 'uploads')) && fs.readFileSync(u1.path, 'utf8') === 'hello log', JSON.stringify(u1));
+  check('upload name is cleaned', /^\d{8}-\d{6}-evil name_\.log$/.test(path.basename(u1.path)), path.basename(u1.path));
+  check('upload folder ignored by git', fs.readFileSync(path.join(work, '.imnotcc', '.gitignore'), 'utf8').includes('*'));
+  check('upload of a key is refused', (await up('id_rsa', 'x')).status === 400);
+  check('upload without origin is refused', (await fetch(`${BASE}${S}/upload?name=a.txt`, { method: 'POST', headers: { cookie }, body: 'x' })).status === 403);
+  const big = await up('big.bin', Buffer.alloc(50 * 1024 * 1024 + 1));
+  check('upload over the limit is refused', big.status === 413, String(big.status));
+  check('nothing kept from a refused upload', !fs.readdirSync(path.join(work, '.imnotcc', 'uploads')).some((f) => f.endsWith('big.bin')));
+
+  // Zip
+  const z = await fetch(`${BASE}${S}/zip`, { headers: { cookie } });
+  const zbuf = Buffer.from(await z.arrayBuffer());
+  const zipNames = zbuf.toString('latin1');
+  check('zip downloads', z.status === 200 && z.headers.get('content-type') === 'application/zip' && zbuf.subarray(0, 2).toString() === 'PK');
+  check('zip has the files', zipNames.includes('src/main.js') && zipNames.includes('README.md'));
+  check('zip leaves secrets out', !zipNames.includes('server.key') && !/\.env[^.]/.test(zipNames.replace('.env.example', '')));
+  check('zip of a missing folder is 404', (await fetch(`${BASE}${S}/zip?path=nope`, { headers: { cookie } })).status === 404);
 } catch (e) {
   console.error(e);
   failed++;

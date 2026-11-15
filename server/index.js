@@ -16,6 +16,7 @@ import { pluginRoutes } from './plugins.js';
 import { claudeSettingsRoutes } from './claudeSettings.js';
 import { fileRoutes } from './files.js';
 import { browseRoutes } from './browse.js';
+import { transferRoutes } from './transfer.js';
 import { pushRoutes } from './push.js';
 import { claudeLoginRoutes } from './claudeLogin.js';
 
@@ -175,6 +176,7 @@ app.get('/api/sessions/:id/changes', (req, res) => {
 
 fileRoutes(app, { requireSession, wrap });
 browseRoutes(app, { requireSession, wrap });
+transferRoutes(app, { requireSession, wrap });
 
 app.post('/api/sessions/:id/fork',wrap(async (req, res) => {
   const meta = requireSession(req, res);
