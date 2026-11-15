@@ -74,10 +74,6 @@ export function DiffBody({ target }: { target: DiffTarget }) {
     return () => { live = false; };
   }, [key, target.session, target.turn, target.path]);
   const rows = React.useMemo(() => (state.key === key && state.patch ? parsePatch(state.patch) : []), [state, key]);
-  // Coloured as one text, in the patch's order: close enough line by line.
-  const lines = React.useMemo(() => rows.filter((r): r is Line => r.kind === "line"), [rows]);
-  const tokens = useTokens(React.useMemo(() => lines.map((l) => l.text).join("\n"), [lines]), baseName(target.path));
-  const tok = React.useMemo(() => new Map(lines.map((l, i) => [l, tokens?.[i]] as const)), [lines, tokens]);
 
   const index = target.files.findIndex((f) => f.path === target.path);
   const step = (by: number) => {
@@ -97,9 +93,28 @@ export function DiffBody({ target }: { target: DiffTarget }) {
       {state.key !== key ? <LoadingList label="載入中" rows={3} />
         : state.error ? <ErrorState message={state.error} retryLabel="重試" title="看不到這個變更" />
         : !rows.length ? <p className="py-6 text-sm text-ink-muted">{state.patch === "" ? "二進位檔案，沒有逐行的變更可以顯示。" : "沒有內容上的變更。"}</p>
-        : compact ? <Unified rows={rows} tok={tok} /> : <SideBySide rows={rows} tok={tok} />}
+        : <DiffRows compact={compact} name={target.path} rows={rows} />}
     </div>
   );
+}
+
+/** Rows drawn coloured by the file's language: one column on a phone, side by side when there is room. */
+export function DiffRows({ compact, name, rows }: { compact: boolean; name: string; rows: Row[] }) {
+  // Coloured as one text, in the patch's order: close enough line by line.
+  const lines = React.useMemo(() => rows.filter((r): r is Line => r.kind === "line"), [rows]);
+  const tokens = useTokens(React.useMemo(() => lines.map((l) => l.text).join("\n"), [lines]), baseName(name));
+  const tok = React.useMemo(() => new Map(lines.map((l, i) => [l, tokens?.[i]] as const)), [lines, tokens]);
+  return compact ? <Unified rows={rows} tok={tok} /> : <SideBySide rows={rows} tok={tok} />;
+}
+
+/** A tool's edit as diff rows: what it took out, then what it put in. No line numbers; the tool does not give them. */
+export function editRows(edits: { old: string; new: string }[]): Row[] {
+  const split = (t: string) => (t ? t.replace(/\r\n/g, "\n").split("\n") : []);
+  return edits.flatMap((e, i) => [
+    ...(i ? [{ kind: "hunk", text: "⋯" } as Row] : []),
+    ...split(e.old).map((text): Row => ({ kind: "line", type: "-", text })),
+    ...split(e.new).map((text): Row => ({ kind: "line", type: "+", text })),
+  ]);
 }
 
 const TONE = { "+": "bg-[color-mix(in_oklab,var(--positive)_14%,transparent)]", "-": "bg-[color-mix(in_oklab,var(--danger)_14%,transparent)]", " ": "" };

@@ -10,6 +10,9 @@ import { FileIcon } from "./file-icon";
 import { SessionContext } from "@/lib/session-images";
 import { resolveFile, type FileInfo } from "@/lib/file-mentions";
 import { openPreview } from "@/lib/preview";
+import { useCompactViewport } from "@/ui/use-compact-viewport";
+import { baseName } from "@/lib/format";
+import { DiffRows, editRows } from "./diff-view";
 
 const LIMIT = 4000;
 // Allow wheel scrolling to reach the chat when a tool's input or output reaches its edge.
@@ -18,8 +21,6 @@ const codeClass = "max-h-96 overflow-auto overscroll-y-auto! whitespace-pre-wrap
 function inputText(tool: Item) {
   const i = tool.input ?? {};
   if (typeof i.command === "string") return i.command;
-  if (tool.name === "Edit") return `${i.file_path}\n\n− ${String(i.old_string ?? "").replace(/\n/g, "\n− ")}\n\n+ ${String(i.new_string ?? "").replace(/\n/g, "\n+ ")}`;
-  if (tool.name === "Write") return `${i.file_path}\n\n${i.content ?? ""}`;
   return JSON.stringify(i, null, 2);
 }
 
@@ -69,14 +70,16 @@ export function Reveal({ children, open }: { children: React.ReactNode; open: bo
 /** What a step took in and gave back: the full thought, or a tool's input and output. */
 export function ToolDetail({ tool }: { tool: Item }) {
   const [full, setFull] = React.useState(false);
+  const compact = useCompactViewport();
   if (tool.type === "thinking") {
     return <p className="whitespace-pre-wrap rounded-tile bg-surface-raised p-3 text-sm leading-relaxed text-ink-muted [overflow-wrap:anywhere]" data-selectable="">{tool.text}</p>;
   }
   const result = tool.result ?? "";
+  const change = edits(tool);
   return (
     <div className="grid min-w-0 gap-2" data-selectable="">
-      {typeof tool.input?.file_path === "string" ? <OpenFile path={tool.input.file_path} /> : null}
-      <pre className={codeClass}>{inputText(tool)}</pre>
+      {typeof tool.input?.file_path === "string" ? <FilePath path={tool.input.file_path} /> : null}
+      {change ? <DiffRows compact={compact} name={String(tool.input?.file_path ?? "")} rows={editRows(change)} /> : <pre className={codeClass}>{inputText(tool)}</pre>}
       {tool.done && (result || !tool.images?.length) ? (
         <pre className={cn(codeClass, tool.error && "text-danger")}>{(full || result.length <= LIMIT ? result : `${result.slice(0, LIMIT)}…`) || "（沒有輸出）"}</pre>
       ) : null}
@@ -87,8 +90,18 @@ export function ToolDetail({ tool }: { tool: Item }) {
   );
 }
 
-/** The file a tool read or wrote, opened in the preview panel; nothing when it is not there any more. */
-function OpenFile({ path }: { path: string }) {
+/** What an Edit, MultiEdit or Write changed, as old and new text; null for other tools. */
+function edits(tool: Item): { old: string; new: string }[] | null {
+  const i = tool.input ?? {};
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  if (tool.name === "Edit") return [{ old: str(i.old_string), new: str(i.new_string) }];
+  if (tool.name === "Write") return [{ old: "", new: str(i.content) }];
+  if (tool.name === "MultiEdit" && Array.isArray(i.edits)) return (i.edits as Record<string, unknown>[]).map((e) => ({ old: str(e.old_string), new: str(e.new_string) }));
+  return null;
+}
+
+/** The file a tool read or wrote: its path, which opens it in the preview panel while it is still there. */
+function FilePath({ path }: { path: string }) {
   const session = React.useContext(SessionContext);
   const [info, setInfo] = React.useState<FileInfo | null>(null);
   React.useEffect(() => {
@@ -96,12 +109,12 @@ function OpenFile({ path }: { path: string }) {
     if (session) void resolveFile(session, path).then((f) => { if (live) setInfo(f && f.kind !== "dir" ? f : null); });
     return () => { live = false; };
   }, [session, path]);
-  if (!session || !info) return null;
+  const cls = "flex min-w-0 items-center gap-1.5 justify-self-start font-mono text-[0.8125rem] text-ink-muted";
+  if (!session || !info) return <span className={cls}><span className="truncate">{path}</span></span>;
   return (
-    <Button className="max-w-full justify-self-start" onClick={() => openPreview({ kind: "file", session, path: info.path })} size="sm" title={info.path} variant="secondary">
-      <FileIcon className="size-4 shrink-0" kind={info.kind} name={info.name} />
-      <span className="truncate">打開 {info.name}</span>
-    </Button>
+    <button className={cn(cls, "rounded-md underline-offset-2 hover:text-ink hover:underline")} onClick={() => openPreview({ kind: "file", session, path: info.path })} title="在側邊打開" type="button">
+      <FileIcon className="size-4 shrink-0" kind={info.kind} name={baseName(path)} /><span className="truncate">{path}</span>
+    </button>
   );
 }
 
