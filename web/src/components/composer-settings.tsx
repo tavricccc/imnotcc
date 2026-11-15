@@ -127,12 +127,12 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
   const pick = (i: number) => { if (steps[i] !== sent.current) { sent.current = steps[i]; onEffort(steps[i]); } };
   const label = (v: string) => EFFORTS.find((e) => e.value === v)?.label ?? v;
   const last = Math.max(1, steps.length - 1);
-  const at = (i: number) => `calc(14px + (100% - 28px) * ${i / last})`;
+  const at = (i: number) => `calc(16px + (100% - 32px) * ${i / last})`;
   const move = "duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]";
   return (
     <div className="relative h-7">
       <div aria-hidden className="absolute inset-0 rounded-full bg-ink/10" />
-      <div aria-hidden className={cn("absolute inset-y-0 left-0 rounded-full bg-contrast transition-[width]", move)} style={{ width: `calc(${at(draft)} + 14px)` }} />
+      <div aria-hidden className={cn("absolute inset-y-0 left-0 rounded-full bg-contrast transition-[width]", move)} style={{ width: `calc(${at(draft)} + 16px)` }} />
       {steps.map((s, i) => (
         <span aria-hidden className={cn("absolute top-1/2 size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors", move, i < draft ? "bg-white/70" : "bg-ink/30")} key={s} style={{ left: at(i) }} />
       ))}
@@ -151,7 +151,7 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
         type="range"
         value={draft}
       />
-      <span aria-hidden className={cn("pointer-events-none absolute top-1/2 size-6 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/25%)] transition-[left,box-shadow]", move, "peer-focus-visible:shadow-[0_0_0_4px_var(--focus-ring,rgb(220_58_28/35%))]")} style={{ left: at(draft) }} />
+      <span aria-hidden className={cn("pointer-events-none absolute top-1/2 size-8 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_4px_rgb(0_0_0/25%)] transition-[left,box-shadow]", move, "peer-focus-visible:shadow-[0_0_0_4px_var(--focus-ring,rgb(220_58_28/35%))]")} style={{ left: at(draft) }} />
     </div>
   );
 }
