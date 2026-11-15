@@ -34,7 +34,20 @@ async function notify(payload) {
   if (gone.size) { push.subs = push.subs.filter((s) => !gone.has(s.endpoint)); store.save(); }
 }
 
-const clip = (text, n = 140) => { const t = String(text ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+// A notification shows plain text, so markdown marks would appear as literal characters.
+export function plain(text) {
+  return String(text ?? '')
+    .replace(/```[^\n]*\n?([\s\S]*?)```/g, '$1')            // fenced code: keep the code
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')               // images: alt text
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')                // links: label only
+    .replace(/^\s{0,3}(#{1,6}|>+|[-*+]|\d+[.)])\s+/gm, '')  // heading, quote, list markers
+    .replace(/^\s*([-*_]\s*){3,}$/gm, '')                   // horizontal rules
+    .replace(/(\*\*|__|~~)(.+?)\1/g, '$2')                  // bold, strike
+    .replace(/(^|[^\w*])[*_]([^*_\n]+)[*_](?=[^\w*]|$)/g, '$1$2') // italic
+    .replace(/`([^`]*)`/g, '$1');                           // inline code
+}
+
+const clip = (text, n = 140) => { const t = plain(text).replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
 function onRunnerEvent(id, event) {
   if (!id) return;
