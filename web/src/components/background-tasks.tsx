@@ -3,15 +3,20 @@ import { CaretRight, Robot, Stop, Terminal } from "@phosphor-icons/react/ssr";
 import { send, subscribe } from "@/lib/socket";
 import { cn } from "@/lib/utils";
 import { AutoHeight, Popover } from "@/ui/popover";
+import { duration, useNow } from "./turn";
 
 /** One piece of background work, as the server lists it (shells, agents, monitors). */
-export interface BackgroundTask { id: string; type: string; agent: string | null; description: string }
+export interface BackgroundTask {
+  id: string; type: string; agent: string | null; description: string;
+  command?: string | null; // the shell command, or an agent's prompt
+  startedAt?: number;
+}
 
 const isShell = (t: BackgroundTask) => t.type === "local_bash" || t.type === "monitor" || /bash|shell|monitor/i.test(t.type);
 
 /**
- * A quiet "N 個背景工作" label with a breathing dot; it opens the list, where a shell's
- * output can be read while it runs and any task can be stopped.
+ * A quiet "N 個背景工作" label with a breathing dot; it opens the list. Each row reads as
+ * icon, name and how long it has run; opened, it shows the command and, for a shell, its output.
  */
 export function BackgroundTasks({ className, session, tasks }: { className?: string; session: string; tasks: BackgroundTask[] }) {
   const [open, setOpen] = React.useState(false);
@@ -55,20 +60,20 @@ function TaskRow({ onToggle, open, session, task }: { onToggle: () => void; open
   const shell = isShell(task);
   const Icon = shell ? Terminal : Robot;
   const [stopping, setStopping] = React.useState(false);
+  const now = useNow(true);
   return (
     <li className="grid">
       <div className="flex items-center gap-1">
         <button
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[0.875rem] outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] disabled:hover:bg-transparent"
-          disabled={!shell}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-[0.875rem] outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]"
           onClick={onToggle}
-          title={shell ? "查看輸出" : undefined}
           type="button"
         >
+          <CaretRight className={cn("size-3 shrink-0 text-ink-faint motion-safe:transition-transform", open && "rotate-90")} weight="bold" />
           <Icon className="size-4 shrink-0 text-ink-muted" />
           <span className="min-w-0 flex-1 truncate">{task.description || task.agent || task.type}</span>
-          {task.agent ? <span className="shrink-0 text-[0.75rem] text-ink-faint">{task.agent}</span> : null}
-          {shell ? <CaretRight className={cn("size-3 shrink-0 text-ink-faint motion-safe:transition-transform", open && "rotate-90")} weight="bold" /> : null}
+          {task.startedAt ? <span className="shrink-0 text-[0.75rem] tabular-nums text-ink-faint">{duration(now - task.startedAt)}</span> : null}
         </button>
         <button
           aria-label="停止這個工作"
@@ -81,7 +86,17 @@ function TaskRow({ onToggle, open, session, task }: { onToggle: () => void; open
           <Stop className="size-3.5" weight="fill" />
         </button>
       </div>
-      {open ? <TaskOutput session={session} task={task.id} /> : null}
+      {open ? (
+        <div className="mx-1 mb-1 mt-0.5 grid gap-1.5">
+          {task.agent ? <p className="px-1.5 text-[0.75rem] text-ink-faint">{task.agent}</p> : null}
+          {task.command ? (
+            <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-md bg-surface-raised px-2.5 py-2 font-mono text-[0.75rem] leading-relaxed text-ink">
+              {shell ? <span className="select-none text-ink-faint">$ </span> : null}{task.command}
+            </pre>
+          ) : null}
+          {shell ? <TaskOutput session={session} task={task.id} /> : null}
+        </div>
+      ) : null}
     </li>
   );
 }
@@ -107,7 +122,7 @@ function TaskOutput({ session, task }: { session: string; task: string }) {
   }, [out]);
   return (
     <pre
-      className="mx-1 mb-1 mt-0.5 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-surface-raised px-2.5 py-2 font-mono text-[0.75rem] leading-relaxed text-ink-muted"
+      className="max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-surface-raised px-2.5 py-2 font-mono text-[0.75rem] leading-relaxed text-ink-muted"
       onScroll={(e) => { const el = e.currentTarget; stuck.current = el.scrollHeight - el.scrollTop - el.clientHeight < 16; }}
       ref={box}
     >

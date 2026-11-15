@@ -10,7 +10,7 @@ import { baseName, isStep, pathOf, type FileChange } from "@/lib/turns";
 // "已處理 2 分鐘 26 秒", tool calls read as past-tense lines, and the files the
 // turn edited close it as a short list.
 
-function duration(ms: number) {
+export function duration(ms: number) {
   const s = Math.max(1, Math.round(ms / 1000));
   if (s < 60) return `${s} 秒`;
   const m = Math.floor(s / 60);
@@ -18,7 +18,7 @@ function duration(ms: number) {
   return `${Math.floor(m / 60)} 小時${m % 60 ? ` ${m % 60} 分鐘` : ""}`;
 }
 
-function useNow(live: boolean) {
+export function useNow(live: boolean) {
   const [now, setNow] = React.useState(Date.now);
   React.useEffect(() => {
     if (!live) return;

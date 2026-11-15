@@ -101,7 +101,7 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
         }}
         onPointerUp={finish}
         role="separator" tabIndex={0} />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-panel border border-line bg-surface-solid shadow-float">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-panel border border-line bg-surface-solid shadow-panel">
         <header className="flex shrink-0 items-start gap-2 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1 pt-1"><Title file={file} source={source} target={target} toggleSource={toggleSource} /></div>
           <Button aria-label="關閉預覽" onClick={closePreview} size="icon-sm" variant="ghost"><X weight="bold" /></Button>
