@@ -529,12 +529,13 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
           <Button aria-label="返回" className="md:hidden" onClick={() => goBack("/")} size="icon" variant="ghost"><CaretLeft weight="bold" /></Button>
           <button className="min-w-0 flex-1 rounded-full px-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)] md:flex md:flex-none md:items-center md:gap-1.5 md:rounded-lg md:px-2 md:py-1.5 md:hover:bg-surface-raised" onClick={() => setSheet("options")} title={meta?.cwd} type="button">
             <FolderSimple className="hidden size-4 shrink-0 text-ink-muted md:block" />
-            <h1 className="truncate text-[0.9375rem] font-semibold md:text-[0.875rem] md:font-medium">{title}</h1>
-            <p className="truncate text-[0.8125rem] text-ink-muted md:hidden">
-              {meta ? baseName(meta.cwd) : ""}
-              {!online ? <span className="text-caution"> · 離線</span> : null}
-            </p>
-            {!online ? <span className="hidden shrink-0 text-[0.8125rem] text-caution md:inline">離線</span> : null}
+            <span className="min-w-0 md:leading-tight">
+              <h1 className="truncate text-[0.9375rem] font-semibold md:text-[0.875rem] md:font-medium">{title}</h1>
+              <p className="truncate text-[0.8125rem] text-ink-muted md:text-[0.75rem]">
+                {meta ? baseName(meta.cwd) : ""}
+                {!online ? <span className="text-caution"> · 離線</span> : null}
+              </p>
+            </span>
             <CaretDown className="hidden size-3 shrink-0 text-ink-muted md:block" weight="bold" />
           </button>
           <span className="hidden flex-1 md:block" />
