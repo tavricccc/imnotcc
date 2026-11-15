@@ -36,11 +36,10 @@ function hostPath(cwd, p) {
 export async function snapshot(cwd) {
   let scratch;
   try {
-    const [index, scratchPath] = (await git(cwd, ['rev-parse', '--git-path', 'index', '--git-path', SCRATCH])).trim().split(/\r?\n/);
+    const [index, scratchPath, top] =(await git(cwd, ['rev-parse', '--git-path', 'index', '--git-path', SCRATCH, '--show-toplevel'])).trim().split(/\r?\n/);
     scratch = scratchPath;
     // Starting from the real index keeps git's stat cache, so unchanged files are not hashed again.
     try { fs.copyFileSync(hostPath(cwd, index), hostPath(cwd, scratch)); } catch { /* a repository with no index yet */ }
-    const top = (await git(cwd, ['rev-parse', '--show-toplevel'])).trim();
     const env = { GIT_INDEX_FILE: absolute(cwd, scratch) };
     await git(top, ['add', '-A'], env);
     return { top, tree: (await git(top, ['write-tree'], env)).trim() };

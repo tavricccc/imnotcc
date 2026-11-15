@@ -394,8 +394,16 @@ server.on('upgrade', (req, socket, head) => {
 
 wss.on('connection', (ws) => {
   const subs = new Set();
+  const socketId = crypto.randomUUID();
   const send = (obj) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj)); };
-  const off = runners.onEvent((id, event) => { if (id === null || subs.has(id)) send({ session: id, ...event }); });
+  const off = runners.onEvent((id, event) => {
+    if (id !== null && !subs.has(id)) return;
+    if (event.kind === 'prompt') {
+      const { from, ...rest } = event;
+      return send({ session: id, ...rest, ...(from === socketId ? { images: [] } : {}) });
+    }
+    send({ session: id, ...event });
+  });
   ws.on('close', off);
   ws.on('message', async (raw) => {
     let m;
@@ -420,7 +428,7 @@ wss.on('connection', (ws) => {
         case 'send': {
           const { text, images } = readPrompt(m);
           const uuid = typeof m.uuid === 'string' && UUID.test(m.uuid) ? m.uuid : undefined;
-          if (text || images.length) await r.send(text, images, uuid, { queue: m.queue === true });
+          if (text || images.length) await r.send(text, images, uuid, { queue: m.queue === true, from: socketId });
           break;
         }
         case 'unqueue': if (typeof m.uuid === 'string') r.unqueue(m.uuid); break;

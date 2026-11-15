@@ -38,7 +38,13 @@ export function probeControls(cwd) {
   return probing;
 }
 export function onEvent(fn) { listeners.add(fn); return () => listeners.delete(fn); }
-const emit = (id, event) => { for (const fn of listeners) fn(id, event); };
+// Anything else said about a session goes out after the text streamed before it.
+const emit = (id, event) => {
+  if (id && event.kind !== 'delta') runners.get(id)?.flushDelta();
+  for (const fn of listeners) fn(id, event);
+};
+// Streamed text is sent in batches rather than one socket message per token.
+const DELTA_MS = 40;
 /** Sends `event` to every open page. */
 export const broadcast = (event) => emit(null, event);
 
@@ -87,6 +93,8 @@ class Runner {
     this.context = null;
     this.cost = null;
     this.draft = ''; // the reply still streaming, for a socket that joins mid-turn
+    this.unsent = ''; // streamed text not yet sent to the pages
+    this.deltaTimer = null;
     this.turn = null; // { uuid, before: snapshot | null } while a turn that started with that prompt runs
     // Prompts sent as "queue" while a turn ran: each goes out as its own turn once the one before
     // ends. Kept here rather than handed to Claude Code, so when they go is up to this server.
@@ -125,7 +133,19 @@ class Runner {
   get meta() { return store.get().sessions[this.id]; }
   mode() { return this.meta?.permissionMode ?? store.get().settings.permissionMode; }
 
+  flushDelta() {
+    clearTimeout(this.deltaTimer);
+    this.deltaTimer = null;
+    if (!this.unsent) return;
+    const text = this.unsent;
+    this.unsent = '';
+    emit(this.id, { kind: 'delta', text });
+  }
+
   snapshot() {
+    // Pages already watching get the unsent text first; the joining one gets it in `draft` too,
+    // and its snapshot replaces whatever it had.
+    this.flushDelta();
     const s = store.get().settings;
     return {
       kind: 'snapshot', status: this.status, open: !!this.q, draft: this.draft, context: this.context, cost: this.cost, queued: this.heldView(),
@@ -193,7 +213,8 @@ class Runner {
       const ev = m.event;
       if (m.parent_tool_use_id === null && ev?.type === 'content_block_delta' && ev.delta?.type === 'text_delta') {
         this.draft += ev.delta.text;
-        emit(this.id, { kind: 'delta', text: ev.delta.text });
+        this.unsent += ev.delta.text;
+        this.deltaTimer ??= setTimeout(() => this.flushDelta(), DELTA_MS);
       }
       return;
     }
@@ -245,32 +266,35 @@ class Runner {
   }
 
   /** `queue` holds the prompt until the running turn ends; otherwise it joins that turn (steer). */
-  async send(text, images = [], uuid, { queue = false } = {}) {
+  async send(text, images = [], uuid, { queue = false, from } = {}) {
     if (queue && this.status === 'running' && uuid) {
       this.held.push({ uuid, text, images });
       this.emitHeld();
       return;
     }
     clearTimeout(this.idleTimer);
-    await this.restarting?.catch(() => {});
-    await this.applyEffort();
-    if (!this.q) {
-      await this.start();
-      if (uuid === this.id) await this.q.initializationResult();
-    }
+    // A prompt sent while a turn runs joins that turn; its changes are counted from the first.
+    // The 'before' snapshot is taken while Claude Code starts, and the prompt only goes out once
+    // it is done, so nothing Claude does can land in the 'before' side.
+    const counts = this.status !== 'running' && !this.turn && uuid;
+    const before = counts ? changes.snapshot(this.meta.cwd) : null;
+    try {
+      await this.restarting?.catch(() => {});
+      await this.applyEffort();
+      if (!this.q) {
+        await this.start();
+        if (uuid === this.id) await this.q.initializationResult();
+      }
+    } finally { await before; }
     const content = images.length ? [
       ...images.map(({ data, mediaType }) => ({ type: 'image', source: { type: 'base64', media_type: mediaType, data } })),
       ...(text ? [{ type: 'text', text }] : []),
     ] : text;
-    // A prompt sent while a turn runs joins that turn; its changes are counted from the first.
-    if (this.status !== 'running' && !this.turn && uuid) {
-      // Taken before the prompt goes out, so nothing Claude does can land in the 'before' side.
-      const turn = this.turn = { uuid, before: null };
-      turn.before = await changes.snapshot(this.meta.cwd);
-    }
+    if (counts && !this.turn) this.turn = { uuid, before: await before };
     this.queue.push({ type: 'user', ...(uuid ? { uuid } : {}), message: { role: 'user', content }, parent_tool_use_id: null });
     // Every device on this session shows the prompt now, not only the one that sent it.
-    if (uuid) emit(this.id, { kind: 'prompt', uuid, text, images: images.map(({ data, mediaType }) => ({ data, mediaType })) });
+    // The page that sent it (`from`) already shows its images, so they are not sent back to it.
+    if (uuid) emit(this.id, { kind: 'prompt', uuid, text, from, images: images.map(({ data, mediaType }) => ({ data, mediaType })) });
     this.setStatus('running');
     this.wake?.();
   }
