@@ -117,7 +117,8 @@ pub fn needs_deps_install(app: &AppHandle) -> bool {
     let Ok(src) = bundled_src_dir(app) else {
         return true;
     };
-    !deps_up_to_date(&src, &app_dir(app))
+    let dest = app_dir(app);
+    !deps_up_to_date(&src, &dest) || linux_claude_missing(&dest)
 }
 
 fn hidden(cmd: &str) -> Command {
@@ -339,6 +340,20 @@ fn package_version(dir: &Path) -> Option<String> {
     serde_json::from_str::<serde_json::Value>(&raw).ok()?["version"].as_str().map(str::to_string)
 }
 
+/// WSL is present on this PC.
+fn wsl_present() -> bool {
+    hidden("wsl.exe").args(["-l", "-q"]).output().map(|o| o.status.success()).unwrap_or(false)
+}
+
+/// WSL is there but the Linux Claude Code at the SDK's version is not installed yet.
+fn linux_claude_missing(dest: &Path) -> bool {
+    let Some(sdk) = package_version(&dest.join("node_modules").join("@anthropic-ai").join("claude-agent-sdk")) else {
+        return false;
+    };
+    let pkg = dest.join("linux").join("node_modules").join("@anthropic-ai").join("claude-agent-sdk-linux-x64");
+    package_version(&pkg).as_deref() != Some(sdk.as_str()) && wsl_present()
+}
+
 /// Installs the Linux build of Claude Code at the SDK's version into `dest/linux`, so WSL sessions
 /// run the same Claude Code as Windows ones. It lives in its own folder because npm removes
 /// packages that do not match this OS from `node_modules`. Skipped without WSL; a failure only
@@ -348,17 +363,13 @@ fn ensure_linux_claude(app: &AppHandle, log: &Arc<Mutex<File>>, dest: &Path) {
         let _ = writeln!(log.lock().unwrap(), "{line}");
         let _ = app.emit("install-log", line.to_string());
     };
-    if !hidden("wsl.exe").args(["-l", "-q"]).output().map(|o| o.status.success()).unwrap_or(false) {
+    if !linux_claude_missing(dest) {
         return;
     }
     let Some(sdk) = package_version(&dest.join("node_modules").join("@anthropic-ai").join("claude-agent-sdk")) else {
         return;
     };
     let linux = dest.join("linux");
-    let pkg = linux.join("node_modules").join("@anthropic-ai").join("claude-agent-sdk-linux-x64");
-    if package_version(&pkg).as_deref() == Some(sdk.as_str()) {
-        return;
-    }
     say(&format!("下載 WSL 用的 Claude Code {sdk}（Linux 版，約 170 MB）…"));
     let spec = format!("@anthropic-ai/claude-agent-sdk-linux-x64@{sdk}");
     let result = fs::create_dir_all(&linux)

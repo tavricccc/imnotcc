@@ -51,6 +51,10 @@ pub struct Config {
     /// Remote servers connected to before, to switch between from the tray or App settings.
     #[serde(default)]
     pub remotes: Vec<Remote>,
+    /// Start with Windows was on. The installer's uninstall step removes the autostart entry on
+    /// every update, so it is put back from this at startup.
+    #[serde(default)]
+    pub autostart: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
@@ -90,7 +94,7 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
-        Config { url: None, local: false, installed_version: None, port: default_port(), origins: Vec::new(), remote_url: None, remotes: Vec::new() }
+        Config { url: None, local: false, installed_version: None, port: default_port(), origins: Vec::new(), remote_url: None, remotes: Vec::new(), autostart: false }
     }
 }
 
@@ -716,7 +720,15 @@ fn set_autostart(app: AppHandle, window: WebviewWindow, enabled: bool) -> Result
     } else {
         al.disable().map_err(|e| format!("取消開機啟動失敗：{e}"))?;
     }
-    Ok(al.is_enabled().unwrap_or(enabled))
+    let on = al.is_enabled().unwrap_or(enabled);
+    let state = app.state::<AppState>();
+    let c = {
+        let mut c = state.config.lock().unwrap();
+        c.autostart = on;
+        c.clone()
+    };
+    save_config(&app, &c)?;
+    Ok(on)
 }
 
 #[tauri::command]
@@ -966,8 +978,11 @@ pub fn run() {
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
-            if had_autostart { let _ = handle.autolaunch().enable(); }
-            let config = load_config(&handle);
+            let mut config = load_config(&handle);
+            let enabled = handle.autolaunch().is_enabled().unwrap_or(false);
+            if had_autostart || (config.autostart && !enabled) { let _ = handle.autolaunch().enable(); }
+            let want = had_autostart || enabled || config.autostart;
+            if want != config.autostart { config.autostart = want; let _ = save_config(&handle, &config); }
             app.manage(AppState { config: Mutex::new(config.clone()), server: local::Supervisor::default() });
             build_tray(&handle)?;
 
