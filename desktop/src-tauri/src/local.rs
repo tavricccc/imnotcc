@@ -334,6 +334,45 @@ fn copy_bundled_files(src: &Path, dest: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn package_version(dir: &Path) -> Option<String> {
+    let raw = fs::read_to_string(dir.join("package.json")).ok()?;
+    serde_json::from_str::<serde_json::Value>(&raw).ok()?["version"].as_str().map(str::to_string)
+}
+
+/// Installs the Linux build of Claude Code at the SDK's version into `dest/linux`, so WSL sessions
+/// run the same Claude Code as Windows ones. It lives in its own folder because npm removes
+/// packages that do not match this OS from `node_modules`. Skipped without WSL; a failure only
+/// leaves WSL on its own `claude`.
+fn ensure_linux_claude(app: &AppHandle, log: &Arc<Mutex<File>>, dest: &Path) {
+    let say = |line: &str| {
+        let _ = writeln!(log.lock().unwrap(), "{line}");
+        let _ = app.emit("install-log", line.to_string());
+    };
+    if !hidden("wsl.exe").args(["-l", "-q"]).output().map(|o| o.status.success()).unwrap_or(false) {
+        return;
+    }
+    let Some(sdk) = package_version(&dest.join("node_modules").join("@anthropic-ai").join("claude-agent-sdk")) else {
+        return;
+    };
+    let linux = dest.join("linux");
+    let pkg = linux.join("node_modules").join("@anthropic-ai").join("claude-agent-sdk-linux-x64");
+    if package_version(&pkg).as_deref() == Some(sdk.as_str()) {
+        return;
+    }
+    say(&format!("下載 WSL 用的 Claude Code {sdk}（Linux 版，約 170 MB）…"));
+    let spec = format!("@anthropic-ai/claude-agent-sdk-linux-x64@{sdk}");
+    let result = fs::create_dir_all(&linux)
+        .map_err(|e| e.to_string())
+        .and_then(|_| {
+            let manifest = linux.join("package.json");
+            if manifest.exists() { Ok(()) } else { fs::write(manifest, r#"{"name":"imnotcc-linux-claude","private":true}"#).map_err(|e| e.to_string()) }
+        })
+        .and_then(|_| run_npm(app, log, &linux, &["install", "--force", "--os=linux", "--cpu=x64", "--libc=glibc", "--omit=dev", "--no-audit", "--no-fund", &spec]));
+    if let Err(e) = result {
+        say(&format!("WSL 用的 Claude Code 沒裝成功，WSL 會改用它自己安裝的 claude：{e}"));
+    }
+}
+
 #[derive(Serialize, Clone)]
 struct Done {
     ok: bool,
@@ -450,6 +489,7 @@ fn install(app: &AppHandle, log_path: &Path, force: bool) -> Result<(), String> 
         run_npm(app, &log, &dest, &["ci", "--omit=dev", "--no-audit", "--no-fund"])?;
         let _ = fs::remove_file(dest.join(".deps-failed"));
     }
+    ensure_linux_claude(app, &log, &dest);
 
     let c = {
         let mut c = state.config.lock().unwrap();
@@ -499,6 +539,7 @@ fn sdk_update(app: &AppHandle, log_path: &Path) -> Result<(), String> {
         return Err(e);
     }
     let _ = fs::remove_file(dest.join(".deps-failed"));
+    ensure_linux_claude(app, &log, &dest);
 
     say("重新啟動本機 server…");
     state.server.start(app);

@@ -34,7 +34,7 @@ const targets = () => (wsl.available() ? ['host', 'wsl'] : ['host']);
 
 function run(target, args) {
   const opts = { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true };
-  if (target === 'wsl') return spawn('wsl.exe', wsl.cliArgs(args), opts);
+  if (target === 'wsl') return spawn('wsl.exe', wsl.cliArgs(args), { ...opts, env: wsl.cliEnv() });
   return spawn(claudeExe(), args, { ...opts, env: wsl.spawnOptions(process.cwd()).env });
 }
 
