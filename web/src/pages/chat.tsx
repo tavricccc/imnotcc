@@ -30,7 +30,7 @@ import { ToolCard } from "@/components/tool-card";
 import { BackgroundTasks, type BackgroundTask } from "@/components/background-tasks";
 import { FilesCard, TurnWork } from "@/components/turn";
 import { isStep, turnRows, type FileChange } from "@/lib/turns";
-import { BUSY_SEND_LABEL, prefs } from "@/lib/prefs";
+import { BUSY_SEND_LABEL, prefs, reduceMotion } from "@/lib/prefs";
 import { Meter, UsageRing } from "@/components/usage-ring";
 import { Button } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
@@ -231,7 +231,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const glideNow = React.useCallback(() => {
     const el = scrollArea.current;
     if (!el) return;
-    if (jump.current || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    if (jump.current || reduceMotion()) {
       jump.current = false;
       el.scrollTop = el.scrollHeight;
       return;

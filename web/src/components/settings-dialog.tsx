@@ -1,4 +1,5 @@
 import * as React from "react";
+import { reduceMotion } from "@/lib/prefs";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { motion } from "motion/react";
 import {
@@ -125,7 +126,7 @@ function DesktopSectionPane({ section, children }: { section: SettingsSection; c
     for (const anim of el.getAnimations({ subtree: true })) {
       if (anim instanceof CSSAnimation && anim.animationName === "content-in") anim.finish();
     }
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = reduceMotion();
     const dir = Math.sign(nextIndex - prev);
     const rise = reduced ? 0 : dir * (Number.parseFloat(getComputedStyle(el).getPropertyValue("--motion-rise")) || 10);
     el.animate(

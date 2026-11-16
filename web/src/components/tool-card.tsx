@@ -1,5 +1,7 @@
 import * as React from "react";
-import { animate, useReducedMotion } from "motion/react";
+import { prefs } from "@/lib/prefs";
+import { useStore } from "@/lib/store-core";
+import { animate } from "motion/react";
 import { Brain, CaretRight, FileText, Globe, ListChecks, MagnifyingGlass, PencilSimple, PuzzlePiece, Question, Robot, TerminalWindow, Wrench, X } from "@phosphor-icons/react/ssr";
 import { motionEasing, motionSeconds } from "@/generated/motion-tokens";
 import { toolSummary, type Item } from "@/lib/transcript";
@@ -35,7 +37,7 @@ function revealSeconds(height: number, opening: boolean) {
 
 /** Content that grows open under its line and folds away again, taking longer the taller it is. */
 export function Reveal({ children, open }: { children: React.ReactNode; open: boolean }) {
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useStore(prefs).reduceMotion;
   const [shown, setShown] = React.useState(open);
   const box = React.useRef<HTMLDivElement>(null);
   const first = React.useRef(true);

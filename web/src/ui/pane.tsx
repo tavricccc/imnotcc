@@ -1,4 +1,5 @@
 import * as React from "react";
+import { reduceMotion } from "@/lib/prefs";
 import { cssEasing, timingMs } from "@/lib/motion-timing";
 
 /**
@@ -56,7 +57,7 @@ export function Pane({ children, className, direction, step }: PaneStep & {
     for (const animation of element.getAnimations({ subtree: true })) {
       if (animation instanceof CSSAnimation && animation.animationName === "content-in") animation.finish();
     }
-    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const still = reduceMotion();
     const travel = still ? 0 : direction * Number.parseFloat(getComputedStyle(element).getPropertyValue("--motion-route-travel"));
     element.animate(
       [{ opacity: 0, translate: `${travel || 0}px 0` }, { opacity: 1, translate: "0 0" }],

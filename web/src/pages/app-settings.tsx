@@ -663,6 +663,7 @@ export function AppSettingsPage() {
         <SwitchRow checked={view.groupTools} detail="每個回合的工作過程收成「處理了幾分鐘」，只留最後的回覆和改過的檔案" label="折疊工作過程" onChange={(v) => prefs.set({ groupTools: v })} />
         <SwitchRow checked={view.bubbles} label="回覆用對話氣泡" onChange={(v) => prefs.set({ bubbles: v })} />
         <SwitchRow checked={view.hideWork} detail="只留你和 Claude 的對話，執行中會顯示正在用的工具" disabled={!view.bubbles} label="氣泡模式隱藏思考和工具" onChange={(v) => prefs.set({ hideWork: v })} />
+        <SwitchRow checked={view.reduceMotion} detail="關閉轉場和動畫，預設關閉" label="減少動態效果" onChange={(v) => prefs.set({ reduceMotion: v })} />
       </ListGroup>
 
       <ListGroup footer="長按送出鍵，或在電腦上按 Ctrl+Enter，可以單次改用另一種。Shift+Enter 換行。" title="Claude 工作中送出訊息">

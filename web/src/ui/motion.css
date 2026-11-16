@@ -21,11 +21,9 @@
   50% { background-color: var(--surface-pressed); }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .skeleton {
+:root[data-reduce-motion] .skeleton {
     animation: skeleton-appear 0s linear calc(var(--motion-touch) * 3) forwards;
   }
-}
 
 /* Floating surfaces the Radix primitives mount and unmount: menus, popovers,
    select lists and dialogs. Radix keeps a closing surface mounted until its
@@ -71,13 +69,11 @@
   from { opacity: 0; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .float-surface[data-state],
-  .dialog-surface[data-state],
-  .scrim[data-state] {
+:root[data-reduce-motion] .float-surface[data-state],
+:root[data-reduce-motion] .dialog-surface[data-state],
+:root[data-reduce-motion] .scrim[data-state] {
     animation-name: scrim-in;
   }
-}
 
 /* Content that replaces a placeholder, or joins a list, rises into place
    instead of being there on one frame. A message that appears under a
@@ -104,20 +100,18 @@
 }
 
 /* Move the viewport-sized chat shell, so the transcript's length cannot move its composer. */
-@media (prefers-reduced-motion: no-preference) {
-  .chat-route-in {
-    animation: chat-route-in var(--motion-control) var(--ease-nav);
-  }
+.chat-route-in {
+  animation: chat-route-in var(--motion-control) var(--ease-nav);
 }
+:root[data-reduce-motion] .chat-route-in { animation: none; }
 
 @keyframes chat-route-in {
   from { opacity: 0; translate: var(--motion-route-travel) 0; }
 }
 
 /* The preview panel arrives from the right edge. */
-@media (prefers-reduced-motion: no-preference) {
-  .preview-in { animation: preview-in var(--motion-control) var(--ease-nav); }
-}
+.preview-in { animation: preview-in var(--motion-control) var(--ease-nav); }
+:root[data-reduce-motion] .preview-in { animation: none; }
 
 @keyframes preview-in {
   from { opacity: 0; translate: 1.5rem 0; }
@@ -127,16 +121,13 @@
   from { scale: 0 1; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .content-in,
-  .message-in {
+:root[data-reduce-motion] .content-in,
+:root[data-reduce-motion] .message-in {
     animation-name: scrim-in;
   }
-
-  .bar-in {
+:root[data-reduce-motion] .bar-in {
     animation: none;
   }
-}
 
 /* A screen whose code is still on its way: the current one stays put and a
    thin line sweeps along the top. It only shows once a touch has passed, so a
@@ -173,13 +164,11 @@
   to { translate: 250% 0; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .route-progress::after {
+:root[data-reduce-motion] .route-progress::after {
     width: 100%;
     animation: none;
     opacity: 0.6;
   }
-}
 
 /* A theme change cross-fades the whole screen (see lib/theme). */
 ::view-transition-old(root),

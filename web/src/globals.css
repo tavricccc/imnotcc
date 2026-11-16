@@ -104,13 +104,11 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 /* The usage ring's arcs ease to a new value. */
 .ring-arc { transition: stroke-dasharray var(--motion-reveal) var(--ease-arrive), stroke var(--motion-control) var(--ease-move); }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+:root[data-reduce-motion] *, :root[data-reduce-motion] *::before, :root[data-reduce-motion] *::after {
     scroll-behavior: auto !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-  }
 }
 
 /* Shiki writes both themes' colours; the dark theme takes its own. */
@@ -124,4 +122,4 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 .effort-pill::-moz-range-thumb { width: 32px; height: 32px; border: 0; opacity: 0; }
 .effort-pill:focus-visible { outline: none; }
 .auto-height { transition: height var(--motion-control) var(--ease-arrive); }
-@media (prefers-reduced-motion: reduce) { .auto-height { transition: none; } }
+:root[data-reduce-motion] .auto-height { transition: none; }
