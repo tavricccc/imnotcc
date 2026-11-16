@@ -129,7 +129,20 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   }, [draftKey, text]);
   const [sheet, setSheet] = React.useState<SheetName>(null);
   const [menuIndex, setMenuIndex] = React.useState(0);
-  const [images, setImages] = React.useState<PickedImage[]>([]);
+  // Pasted images are kept with the draft too, as data (the preview url is rebuilt on load).
+  const imagesKey = `imnotcc:composer:images:${id}`;
+  const [images, setImages] = React.useState<PickedImage[]>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(imagesKey) ?? "[]") as { data: string; mediaType: string }[];
+      return saved.map((i) => ({ ...i, url: `data:${i.mediaType};base64,${i.data}` }));
+    } catch { return []; }
+  });
+  React.useEffect(() => {
+    try {
+      if (images.length) localStorage.setItem(imagesKey, JSON.stringify(images.map(({ data, mediaType }) => ({ data, mediaType }))));
+      else localStorage.removeItem(imagesKey);
+    } catch { /* over the storage quota: the images stay for this visit only */ }
+  }, [imagesKey, images]);
   const [uploading, setUploading] = React.useState(0);
   // Each file goes up on its own; once there, a line naming its path joins the message.
   const attachFiles = (files: File[]) => {
