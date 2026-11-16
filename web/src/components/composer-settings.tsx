@@ -61,61 +61,7 @@ function arrangeModels(models: Model[], current: string): { main: ModelOption[];
   return { main, more };
 }
 
-/** One-line description per level. "" is whatever the computer's own Claude Code settings (modelSettings) say. */
-const EFFORT_MOOD: Record<string, { text: string }> = {
-  "": { text: "沿用電腦上的全域設定" },
-  low: { text: "快速回答，不多想" },
-  medium: { text: "剛剛好" },
-  high: { text: "認真想一想" },
-  xhigh: { text: "全力以赴" },
-  max: { text: "火力全開，慢一點也值得" },
-};
-
-/** Effort as a slider over what this model offers, "預設" first. Commits when the thumb is let go. */
-function EffortSlider({ disabled, effort, levels, onEffort }: { disabled?: boolean; effort: string; levels: string[]; onEffort: (effort: string) => void }) {
-  const steps = ["", ...levels];
-  const index = Math.max(0, steps.indexOf(effort));
-  const [draft, setDraft] = React.useState(index);
-  // What was last sent, so a blur right after a release does not send it twice.
-  const sent = React.useRef(effort);
-  React.useEffect(() => { setDraft(index); sent.current = effort; }, [index, effort]);
-  const commit = () => { if (steps[draft] !== sent.current) { sent.current = steps[draft]; onEffort(steps[draft]); } };
-  const label = (v: string) => EFFORTS.find((e) => e.value === v)?.label ?? v;
-  const mood = EFFORT_MOOD[steps[draft]] ?? { text: label(steps[draft]) };
-  const pct = steps.length > 1 ? (draft / (steps.length - 1)) * 100 : 0;
-  return (
-    <div className="grid gap-1.5 px-1">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-medium">Effort</span>
-        <span aria-live="polite" className="effort-pop flex items-center gap-1.5 text-sm" key={draft}>
-          <span className="font-semibold text-contrast">{label(steps[draft])}</span>
-          <span className="text-ink-muted">· {mood.text}</span>
-        </span>
-      </div>
-      <input
-        aria-label="Effort"
-        aria-valuetext={`${label(steps[draft])}，${mood.text}`}
-        className="effort-range"
-        disabled={disabled}
-        max={steps.length - 1}
-        min={0}
-        onBlur={commit}
-        onChange={(e) => { setDraft(Number(e.target.value)); navigator.vibrate?.(5); }}
-        onKeyUp={(e) => { if (e.key === "Enter") commit(); }}
-        onPointerUp={commit}
-        step={1}
-        style={{ "--pct": pct } as React.CSSProperties}
-        type="range"
-        value={draft}
-      />
-      <div aria-hidden className="flex justify-between text-[0.6875rem] text-ink-faint">
-        {steps.map((s, i) => <button className={cn("rounded px-0.5 transition-colors", i === draft && "font-semibold text-contrast")} disabled={disabled} key={s || "default"} onClick={() => { setDraft(i); if (sent.current !== s) { sent.current = s; onEffort(s); } }} tabIndex={-1} type="button">{label(s)}</button>)}
-      </div>
-    </div>
-  );
-}
-
-/** Desktop: a pill track with a dot per level and a big round thumb. Commits when let go.
+/** A pill track with a dot per level and a big round thumb. Commits when let go.
     The thumb is drawn here (the native one is invisible, only taking the drag) so it moves with the fill.
     No "default" stop: with no effort set, the thumb rests on medium. */
 function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean; effort: string; levels: string[]; onEffort: (effort: string) => void }) {

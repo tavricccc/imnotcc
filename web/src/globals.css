@@ -116,37 +116,7 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 /* Shiki writes both themes' colours; the dark theme takes its own. */
 :root[data-theme="dark"] .code-tokens span[style] { color: var(--shiki-dark) !important; }
 
-/* Effort slider: an orange track that fills and warms as effort rises; the thumb swells while held. */
-.effort-range {
-  -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; cursor: pointer;
-  --fill: calc(var(--pct) * 1%);
-  --heat: calc(var(--pct) / 100);
-}
-.effort-range:disabled { cursor: not-allowed; opacity: 0.5; }
-.effort-range::-webkit-slider-runnable-track {
-  height: 8px; border-radius: 999px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--contrast) 55%, #ffb36b) 0%, var(--contrast) var(--fill), var(--color-line, rgb(128 128 128 / 22%)) var(--fill));
-}
-.effort-range::-moz-range-track { height: 8px; border-radius: 999px; background: var(--color-line, rgb(128 128 128 / 22%)); }
-.effort-range::-moz-range-progress { height: 8px; border-radius: 999px; background: linear-gradient(90deg, color-mix(in srgb, var(--contrast) 55%, #ffb36b), var(--contrast)); }
-.effort-range::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none; width: 24px; height: 24px; margin-top: -8px; border-radius: 999px;
-  background: #fff; border: 3px solid var(--contrast);
-  box-shadow: 0 0 0 calc(var(--heat) * 7px) color-mix(in srgb, var(--contrast) 22%, transparent), 0 2px 6px rgb(0 0 0 / 18%);
-  transition: transform 160ms cubic-bezier(.3,1.6,.5,1), box-shadow 200ms ease;
-}
-.effort-range::-moz-range-thumb {
-  width: 18px; height: 18px; border-radius: 999px; background: #fff; border: 3px solid var(--contrast);
-  box-shadow: 0 0 0 calc(var(--heat) * 7px) color-mix(in srgb, var(--contrast) 22%, transparent);
-}
-.effort-range:active::-webkit-slider-thumb { transform: scale(1.25); }
-.effort-range:focus-visible { outline: none; }
-.effort-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--focus-ring, rgb(220 58 28 / 35%)); }
-@keyframes effort-pop { 0% { transform: scale(0.85); opacity: 0.4; } 60% { transform: scale(1.08); } 100% { transform: scale(1); opacity: 1; } }
-.effort-pop { animation: effort-pop 240ms ease-out; display: inline-block; }
-@media (prefers-reduced-motion: reduce) { .effort-pop { animation: none; } .effort-range::-webkit-slider-thumb { transition: none; } }
-
-/* Desktop effort pill: the input only supplies the big white thumb; the track and dots are drawn behind it. */
+/* Effort pill: the input only supplies the big white thumb; the track and dots are drawn behind it. */
 .effort-pill { -webkit-appearance: none; appearance: none; width: 100%; height: 100%; margin: 0; background: transparent; cursor: pointer; }
 .effort-pill::-webkit-slider-runnable-track { height: 100%; background: transparent; }
 .effort-pill::-moz-range-track { background: transparent; }
