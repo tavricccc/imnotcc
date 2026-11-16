@@ -74,7 +74,7 @@ function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean
   const label = (v: string) => EFFORTS.find((e) => e.value === v)?.label ?? v;
   const last = Math.max(1, steps.length - 1);
   const at = (i: number) => `calc(16px + (100% - 32px) * ${i / last})`;
-  const move = "duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]";
+  const move = "duration-[var(--motion-control)] ease-[var(--ease-arrive)]";
   return (
     <div className="relative h-7">
       <div aria-hidden className="absolute inset-0 rounded-full bg-ink/10" />
@@ -165,7 +165,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
         <Popover className="w-72 p-0" onOpenChange={(open) => setPanel(open ? "model" : null)} open={panel === "model"} side="top" trigger={modelTrigger}>
           <AutoHeight>
           {view === "models" ? (
-            <div className="max-h-[60svh] overflow-y-auto p-1.5">
+            <div className="content-in max-h-[60svh] overflow-y-auto p-1.5" key="models">
               <p className="px-3 pt-1.5 pb-1 text-sm text-ink-muted">選取模型</p>
               <ul role="radiogroup" aria-label="模型">{main.filter((m) => m.value).map((m) => pickRow(m))}</ul>
               {more.length ? (
@@ -178,7 +178,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
               ) : null}
             </div>
           ) : (
-            <div className="grid gap-2 p-3">
+            <div className="content-in grid gap-2 p-3" key="effort">
               <div className="grid grid-cols-[1.75rem_1fr_1.75rem] items-center">
                 <span />
                 <span aria-live="polite" className="text-center text-sm font-semibold text-contrast">{chosen.efforts ? effortName || (EFFORTS.find((e) => e.value === "medium")?.label ?? "medium") : "—"}</span>
@@ -198,7 +198,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
       {compact && setting("model", "模型與 Effort",
         modelTrigger,
         view === "models" ? (
-          <div className="grid gap-3 pb-2">
+          <div className="content-in grid gap-3 pb-2" key="models">
             <button className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setView("effort")} type="button">
               <CaretRight className="size-3 rotate-180" weight="bold" />返回
             </button>
@@ -206,14 +206,14 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
             {more.length ? (
               <div className="grid gap-2">
                 <button aria-expanded={showMore} className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setShowMore((v) => !v)} type="button">
-                  <CaretRight className={cn("size-3 transition-transform", showMore && "rotate-90")} weight="bold" />更多模型（{more.length}）
+                  <CaretRight className={cn("size-3 transition-transform duration-[var(--motion-control)] ease-[var(--ease-move)]", showMore && "rotate-90")} weight="bold" />更多模型（{more.length}）
                 </button>
-                {showMore ? <ListGroup label="更多模型" role="radiogroup">{more.map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.label} onSelect={() => { onModel(m.value); setView("effort"); }} selected={model === m.value} />)}</ListGroup> : null}
+                {showMore ? <div className="content-in"><ListGroup label="更多模型" role="radiogroup">{more.map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.label} onSelect={() => { onModel(m.value); setView("effort"); }} selected={model === m.value} />)}</ListGroup></div> : null}
               </div>
             ) : null}
           </div>
         ) : (
-          <div className="grid gap-3 px-1 pb-4">
+          <div className="content-in grid gap-3 px-1 pb-4" key="effort">
             <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
               <span />
               <span aria-live="polite" className="text-center text-base font-semibold text-contrast">{chosen.efforts ? effortName || (EFFORTS.find((e) => e.value === "medium")?.label ?? "medium") : "—"}</span>

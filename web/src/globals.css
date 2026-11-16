@@ -123,5 +123,5 @@ body[data-scroll-locked] { margin-right: 0 !important; padding-right: 0 !importa
 .effort-pill::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 32px; height: 32px; opacity: 0; }
 .effort-pill::-moz-range-thumb { width: 32px; height: 32px; border: 0; opacity: 0; }
 .effort-pill:focus-visible { outline: none; }
-.auto-height { transition: height 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.auto-height { transition: height var(--motion-control) var(--ease-arrive); }
 @media (prefers-reduced-motion: reduce) { .auto-height { transition: none; } }

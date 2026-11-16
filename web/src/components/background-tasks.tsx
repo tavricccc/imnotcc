@@ -63,7 +63,7 @@ function TaskRow({ onToggle, open, session, task }: { onToggle: () => void; open
           onClick={onToggle}
           type="button"
         >
-          <CaretRight className={cn("size-3 shrink-0 text-ink-faint motion-safe:transition-transform", open && "rotate-90")} weight="bold" />
+          <CaretRight className={cn("size-3 shrink-0 text-ink-faint motion-safe:transition-transform motion-safe:duration-[var(--motion-control)] motion-safe:ease-[var(--ease-move)]", open && "rotate-90")} weight="bold" />
           <Icon className="size-4 shrink-0 text-ink-muted" />
           <span className="min-w-0 flex-1 truncate">{task.description || task.agent || task.type}</span>
           {task.startedAt ? <span className="shrink-0 text-[0.75rem] tabular-nums text-ink-faint">{duration(now - task.startedAt)}</span> : null}
@@ -80,7 +80,7 @@ function TaskRow({ onToggle, open, session, task }: { onToggle: () => void; open
         </button>
       </div>
       {open ? (
-        <div className="mx-1 mb-1 mt-0.5 grid gap-1.5">
+        <div className="content-in mx-1 mb-1 mt-0.5 grid gap-1.5">
           {task.agent ? <p className="px-1.5 text-[0.75rem] text-ink-faint">{task.agent}</p> : null}
           {task.command ? (
             <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-md bg-surface-raised px-2.5 py-2 font-mono text-[0.75rem] leading-relaxed text-ink">
