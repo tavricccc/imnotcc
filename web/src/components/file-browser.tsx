@@ -88,12 +88,12 @@ export function FilesBody({ mode = "name", path, query, session }: BrowseState &
   );
 }
 
-const rowClass = "flex min-h-11 w-full min-w-0 items-center gap-3 rounded-tile px-2 py-1.5 text-left outline-none transition-colors duration-[var(--motion-control)] hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]";
+const rowClass = "flex min-h-11 w-full min-w-0 items-center gap-3 rounded-tile px-2 py-1.5 text-left outline-none transition-colors duration-[var(--motion-control)] hover:bg-surface-raised active:bg-surface-pressed focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]";
 
 function Entries({ back, go, session, tree }: { back: BrowseState; go: (s: BrowseState) => void; session: string; tree: Tree }) {
   const atRoot = tree.path === tree.root;
   return (
-    <ul className="-mx-2 grid gap-0.5">
+    <ul className="content-in -mx-2 grid gap-0.5" key={tree.path}>
       {tree.parent ? (
         <li><button className={rowClass} onClick={() => go({ path: tree.parent! })} type="button">
           <ArrowUp className="size-5 shrink-0 text-ink-muted" /><span className="text-[0.9375rem] text-ink-muted">上一層</span>
@@ -130,7 +130,7 @@ function Results({ back, mode, path, query, session }: { back: BrowseState; mode
   if (!results.length) return <p className="py-8 text-center text-[0.875rem] text-ink-muted">找不到「{query}」</p>;
   const rel = (p: string) => (p.startsWith(root) ? p.slice(root.length).replace(/^[\\/]/, "") : p);
   return (
-    <ul className="-mx-2 grid gap-0.5">
+    <ul className="content-in -mx-2 grid gap-0.5" key={`${mode}:${query}`}>
       {results.map((h, i) => (
         <li key={`${h.path}:${h.line ?? ""}:${i}`}>
           <button className={cn(rowClass, "items-start")} onClick={() => openPreview({ kind: "file", session, path: h.path, line: h.line, from: back })} type="button">

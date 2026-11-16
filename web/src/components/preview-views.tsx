@@ -41,11 +41,13 @@ export function FileBody({ file: { data, error }, line, session, source }: { fil
   if (error) return <ErrorState message={error} retryLabel="重試" title="打不開這個檔案" />;
   if (!data) return <LoadingList label="載入中" rows={3} />;
   const raw = fileUrl(session, "raw", data.path);
-  if (data.kind === "image") return <img alt={data.name} className="mx-auto max-w-full rounded-tile" src={raw} />;
-  if (data.kind === "pdf") return <iframe className="h-full min-h-[70svh] w-full rounded-tile border border-line" src={raw} title={data.name} />;
-  if (data.text === undefined) return <FileFacts data={data} raw={raw} />;
-  if (data.kind === "markdown" && !source) return <MarkdownFile data={data} session={session} />;
-  return <CodeView line={line} name={data.name} text={data.text} />;
+  const body = data.kind === "image" ? <img alt={data.name} className="mx-auto max-w-full rounded-tile" src={raw} />
+    : data.kind === "pdf" ? <iframe className="h-full min-h-[70svh] w-full rounded-tile border border-line" src={raw} title={data.name} />
+    : data.text === undefined ? <FileFacts data={data} raw={raw} />
+    : data.kind === "markdown" && !source ? <MarkdownFile data={data} session={session} />
+    : <CodeView line={line} name={data.name} text={data.text} />;
+  // Content that replaces the loading rows rises in; a different file or view starts it again.
+  return <div className="content-in h-full" key={`${data.path}:${source}`}>{body}</div>;
 }
 
 export async function revealInExplorer(targetPath: string) {
