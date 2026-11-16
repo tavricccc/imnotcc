@@ -20,6 +20,6 @@ export const useSettings = (enabled = true) => useCached("settings", readSetting
 export const useFolders = (enabled = true) => useCached("folders", readFolders, enabled);
 export const useCompactWindows = (enabled = true) => useCached("compact-windows", readCompactWindows, enabled);
 
-export interface ClaudeGlobal { envs: ClaudeEnv[]; claudeMd: Partial<Record<ClaudeEnv, string>>; efforts: { env: ClaudeEnv; model: string; effort: string | null }[] }
+export interface ClaudeGlobal { envs: ClaudeEnv[]; claudeMd: Partial<Record<ClaudeEnv, string>> }
 export const readClaudeGlobal = () => get<ClaudeGlobal>("/api/claude-global");
 export const useClaudeGlobal = () => useCached("claude-global", readClaudeGlobal);

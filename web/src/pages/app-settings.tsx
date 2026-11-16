@@ -41,7 +41,7 @@ function NotificationSettings() {
   };
   if (!state) return null;
   return (
-    <ListGroup footer="每台裝置各自設定。正在看的對話不會再跳通知。" title="通知">
+    <ListGroup title="通知">
       <SwitchRow checked={state === "on"} detail={PUSH_DETAIL[state]} disabled={busy || (state !== "on" && state !== "off")} label="推播通知" onChange={(on) => void toggle(on)} />
       {state === "on" ? <ListRow label="傳送測試通知" onClick={() => void testPush().catch((e) => toast.error((e as Error).message))} /> : null}
     </ListGroup>
@@ -87,7 +87,7 @@ function LocalStorageSettings() {
   };
   return (
     <>
-      <ListGroup footer="只影響這個裝置。伺服器上的對話與記錄不會動。對話快取只存工具名稱與前 50 字，不含工具輸出與圖片；超過 30 MB 時啟動會提醒。" title="本機儲存空間">
+      <ListGroup footer="只影響這個裝置，伺服器上的對話不會動。" title="本機儲存空間">
         <ListRow detail={stats ? `${stats.count} 個對話` : undefined} label="對話快取用量" value={stats ? mbText(stats.bytes) : "計算中"} />
         <ListRow disabled={!stats?.old.length} icon={<Trash />} label="清除 30 天前的對話快取" onClick={() => setAction("old")} />
         <ListRow disabled={!stats?.count} icon={<Trash />} label="清除全部對話快取" onClick={() => setAction("all")} />
@@ -130,7 +130,7 @@ function ProjectSessionsSettings({ limit }: { limit: typeof SESSION_LIMITS[numbe
 
   return (
     <>
-      <ListGroup footer="依最後更新時間顯示。設定保留數量後，可清理超出數量的本機快取。" title="專案對話">
+      <ListGroup title="專案對話">
         <PickerRow label="每個專案保留最新" onChange={(projectSessionLimit) => prefs.set({ projectSessionLimit })} options={sessionLimitOptions} value={limit} />
         <ListRow disabled={limit === "all" || busy} icon={<Trash />} label="清理舊對話的本機快取" onClick={() => setOpen(true)} />
       </ListGroup>
@@ -168,7 +168,7 @@ function PasswordSheet({ onChanged, onOpenChange, open }: { onChanged?: () => vo
   }
 
   return (
-    <Sheet description="改完之後，其他裝置都要重新登入。" onOpenChange={onOpenChange} open={open} title="更改密碼">
+    <Sheet description="其他裝置需要重新登入。" onOpenChange={onOpenChange} open={open} title="更改密碼">
       <form className="grid gap-4 pb-2" onSubmit={submit}>
         <Field label="目前的密碼">
           {({ id }) => <Input autoComplete="current-password" id={id} onChange={(e) => setCurrent(e.target.value)} type="password" value={current} />}
@@ -259,7 +259,7 @@ function AgentSdkSettings({
   };
 
   return (
-    <ListGroup footer="與底層 Claude Code CLI 引擎版本同步。" title="Claude Agent SDK">
+    <ListGroup title="Claude Agent SDK">
       <ListRow
         detail={detail}
         disabled={checking}
@@ -318,7 +318,7 @@ function ServerList({ onChanged, st }: { onChanged: (config: DesktopConfig) => v
 
   return (
     <>
-      <ListGroup footer="系統匣圖示的選單裡也能切換。" title="Server 清單">
+      <ListGroup title="Server 清單">
         {hasLocal ? (
           <ListRow detail={st.local_url} icon={<Desktop />} label="本機 Server"
             trailing={st.config.local ? current : switchButton("local", () => tauriInvoke("use_local"))} />
@@ -628,7 +628,7 @@ function ClaudeAccountSettings() {
   if (!targets.length) return null;
   return (
     <>
-      <ListGroup footer="Server 電腦上 Claude Code 的登入。Windows 和 WSL 的對話各自登入。" title="Claude 帳號">
+      <ListGroup title="Claude 帳號">
         {targets.map((t) => {
           const s = status[t]!;
           const detail = s.loggedIn === null ? (s.error ?? "讀不到狀態")
@@ -659,14 +659,14 @@ export function AppSettingsPage() {
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader title="App 設定" />
 
-      <ListGroup footer="只存在這個裝置上。" title="對話顯示">
+      <ListGroup title="對話顯示">
         <SwitchRow checked={view.groupTools} detail="每個回合的工作過程收成「處理了幾分鐘」，只留最後的回覆和改過的檔案" label="折疊工作過程" onChange={(v) => prefs.set({ groupTools: v })} />
         <SwitchRow checked={view.bubbles} label="回覆用對話氣泡" onChange={(v) => prefs.set({ bubbles: v })} />
         <SwitchRow checked={view.hideWork} detail="只留你和 Claude 的對話，執行中會顯示正在用的工具" disabled={!view.bubbles} label="氣泡模式隱藏思考和工具" onChange={(v) => prefs.set({ hideWork: v })} />
-        <SwitchRow checked={view.reduceMotion} detail="關閉轉場和動畫，預設關閉" label="減少動態效果" onChange={(v) => prefs.set({ reduceMotion: v })} />
+        <SwitchRow checked={view.reduceMotion} label="減少動態效果" onChange={(v) => prefs.set({ reduceMotion: v })} />
       </ListGroup>
 
-      <ListGroup footer="長按送出鍵，或在電腦上按 Ctrl+Enter，可以單次改用另一種。Shift+Enter 換行。" title="Claude 工作中送出訊息">
+      <ListGroup footer="長按送出鍵或按 Ctrl+Enter，可單次改用另一種。" title="Claude 工作中送出訊息">
         <PickerRow label="預設方式" onChange={(busySend) => prefs.set({ busySend })} options={[
           { label: "加入佇列（這回合結束後送出）", value: "queue" },
           { label: "引導（插進目前這一回合）", value: "steer" },

@@ -27,7 +27,7 @@ export function until(iso?: string) {
 export const baseName = (p?: string) => (p || "").split(/[\\/]/).filter(Boolean).pop() || p || "";
 
 export const MODES = [
-  { value: "default", label: "預設", detail: "改檔案、跑指令前都先問你" },
+  { value: "default", label: "詢問權限", detail: "改檔案、跑指令前都先問你" },
   { value: "acceptEdits", label: "編輯", detail: "改檔案不問，跑指令會問" },
   { value: "plan", label: "規劃", detail: "只讀不改，先寫計畫給你看" },
   { value: "auto", label: "自動", detail: "由 Claude Code 判斷哪些要問" },
@@ -36,7 +36,6 @@ export const MODES = [
 export const modeLabel = (v?: string | null) => MODES.find((m) => m.value === v)?.label ?? v ?? "";
 
 export const EFFORTS = [
-  { value: "", label: "預設" },
   { value: "low", label: "low" },
   { value: "medium", label: "medium" },
   { value: "high", label: "high" },

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ArrowCounterClockwise, CaretDown, CaretRight, Check, Cpu, ShieldCheck } from "@phosphor-icons/react/ssr";
+import { CaretDown, CaretRight, Check, Cpu, ShieldCheck } from "@phosphor-icons/react/ssr";
 import { EFFORTS, MODES, modeLabel } from "@/lib/format";
 import { shared, type Controls } from "@/lib/store";
 import { useStore } from "@/lib/store-core";
@@ -40,8 +40,7 @@ function arrangeModels(models: Model[], current: string): { main: ModelOption[];
     detail: m.description,
     efforts: m.supportsEffort === false || (m.supportedEffortLevels && !m.supportedEffortLevels.length) ? null : m.supportedEffortLevels ?? ALL_EFFORTS,
   });
-  const fallback = models.find((m) => m.value === "default");
-  const main: ModelOption[] = [{ value: "", label: "預設模型", detail: fallback?.description, efforts: fallback ? option(fallback).efforts : ALL_EFFORTS }];
+  const main: ModelOption[] = [];
   const rest = models.filter((m) => m.value !== "default");
   // Newest version per family, from what each entry resolves to.
   const best = new Map<string, number[]>();
@@ -63,7 +62,7 @@ function arrangeModels(models: Model[], current: string): { main: ModelOption[];
 
 /** A pill track with a dot per level and a big round thumb. Commits when let go.
     The thumb is drawn here (the native one is invisible, only taking the drag) so it moves with the fill.
-    No "default" stop: with no effort set, the thumb rests on medium. */
+    With no effort chosen yet, the thumb rests on medium. */
 function EffortPill({ disabled, effort, levels, onEffort }: { disabled?: boolean; effort: string; levels: string[]; onEffort: (effort: string) => void }) {
   const steps = levels;
   const index = steps.indexOf(effort) >= 0 ? steps.indexOf(effort) : Math.max(0, steps.indexOf("medium"));
@@ -126,11 +125,11 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
   const { controls } = useStore(shared);
   const [panel, setPanel] = React.useState<Panel | null>(null);
   const { main, more } = React.useMemo(() => arrangeModels(controls?.models ?? [], model), [controls, model]);
-  const chosen = [...main, ...more].find((m) => m.value === model) ?? main[0];
+  const chosen = [...main, ...more].find((m) => m.value === model) ?? main[0] ?? { value: "", label: "模型", efforts: ALL_EFFORTS };
   const [showMore, setShowMore] = React.useState(false);
   React.useEffect(() => { if (panel === "model") setShowMore(false); }, [panel]);
-  const permission = mode === "default" ? "詢問權限" : modeLabel(mode);
-  const modelName = model ? chosen.label : "預設模型";
+  const permission = modeLabel(mode);
+  const modelName = chosen.label;
   const effortName = effort ? EFFORTS.find((e) => e.value === effort)?.label ?? effort : "";
   const compact = useCompactViewport();
   const [view, setView] = React.useState<"effort" | "models">("effort");
@@ -141,7 +140,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
     <SettingButton aria-label={`模型：${modelName}${effortName ? `，Effort：${effortName}` : ""}`} className="min-w-10 max-[359px]:max-w-24" disabled={disabled}>
       <Cpu className="hidden sm:block" />
       <span className="truncate">
-        {model ? modelName : <><span className="sm:hidden">模型</span><span className="hidden sm:inline">預設模型</span></>}
+        {modelName}
         {effortName ? <span className="text-ink-muted"> · {effortName}</span> : null}
       </span>
     </SettingButton>
@@ -149,7 +148,6 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
   function setting(name: Panel, title: string, trigger: React.ReactElement, content: React.ReactNode) {
     return <Sheet onOpenChange={(open) => setPanel(open ? name : null)} open={panel === name} title={title} trigger={trigger}>{content}</Sheet>;
   }
-  const row = (m: ModelOption) => <ChoiceRow detail={m.detail} key={m.value || "default"} label={m.label} onSelect={() => onModel(m.value)} selected={model === m.value} />;
 
   return (
     <>
@@ -158,7 +156,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
           <ShieldCheck className="hidden sm:block" /><span className="truncate">{permission}</span>
         </SettingButton>,
         <ListGroup label="權限模式" role="radiogroup">
-          {MODES.map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.value === "default" ? "詢問權限" : m.label} onSelect={() => { onMode(m.value); setPanel(null); }} selected={mode === m.value} tone={m.value === "bypassPermissions" ? "danger" : "default"} />)}
+          {MODES.map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.label} onSelect={() => { onMode(m.value); setPanel(null); }} selected={mode === m.value} tone={m.value === "bypassPermissions" ? "danger" : "default"} />)}
         </ListGroup>)}
       <span className="flex-1" />
       {compact ? null : (
@@ -167,7 +165,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
           {view === "models" ? (
             <div className="content-in max-h-[60svh] overflow-y-auto p-1.5" key="models">
               <p className="px-3 pt-1.5 pb-1 text-sm text-ink-muted">選取模型</p>
-              <ul role="radiogroup" aria-label="模型">{main.filter((m) => m.value).map((m) => pickRow(m))}</ul>
+              <ul role="radiogroup" aria-label="模型">{main.map((m) => pickRow(m))}</ul>
               {more.length ? (
                 <Popover align="end" className="w-60 p-0" onOpenChange={setMoreOpen} open={moreOpen} side="left" trigger={
                   <button aria-expanded={moreOpen} className={cn("flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-ink-muted hover:bg-ink/5 hover:text-ink", moreOpen && "bg-ink/5 text-ink")} type="button">
@@ -179,12 +177,8 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
             </div>
           ) : (
             <div className="content-in grid gap-2 p-3" key="effort">
-              <div className="grid grid-cols-[1.75rem_1fr_1.75rem] items-center">
-                <span />
+              <div className="grid grid-cols-1 items-center">
                 <span aria-live="polite" className="text-center text-sm font-semibold text-contrast">{chosen.efforts ? effortName || (EFFORTS.find((e) => e.value === "medium")?.label ?? "medium") : "—"}</span>
-                <button aria-label="Effort 改回預設" className="grid size-7 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || !chosen.efforts} onClick={() => onEffort("")} type="button">
-                  <ArrowCounterClockwise className="size-4" />
-                </button>
               </div>
               <button className="-mt-2.5 flex items-center gap-1 justify-self-center rounded-md px-2 text-xs text-ink-muted hover:text-ink" onClick={() => setView("models")} type="button">
                 {modelName}<CaretRight className="size-3" weight="bold" />
@@ -202,7 +196,7 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
             <button className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setView("effort")} type="button">
               <CaretRight className="size-3 rotate-180" weight="bold" />返回
             </button>
-            <ListGroup label="模型" role="radiogroup">{main.filter((m) => m.value).map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.label} onSelect={() => { onModel(m.value); setView("effort"); }} selected={model === m.value} />)}</ListGroup>
+            <ListGroup label="模型" role="radiogroup">{main.map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.label} onSelect={() => { onModel(m.value); setView("effort"); }} selected={model === m.value} />)}</ListGroup>
             {more.length ? (
               <div className="grid gap-2">
                 <button aria-expanded={showMore} className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setShowMore((v) => !v)} type="button">
@@ -214,12 +208,8 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
           </div>
         ) : (
           <div className="content-in grid gap-3 px-1 pb-4" key="effort">
-            <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
-              <span />
+            <div className="grid grid-cols-1 items-center">
               <span aria-live="polite" className="text-center text-base font-semibold text-contrast">{chosen.efforts ? effortName || (EFFORTS.find((e) => e.value === "medium")?.label ?? "medium") : "—"}</span>
-              <button aria-label="Effort 改回預設" className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || !chosen.efforts} onClick={() => onEffort("")} type="button">
-                <ArrowCounterClockwise className="size-4" />
-              </button>
             </div>
             <button className="flex items-center gap-1 justify-self-center rounded-md px-2 py-1 text-sm text-ink-muted hover:text-ink" onClick={() => setView("models")} type="button">
               {modelName}<CaretRight className="size-3" weight="bold" />

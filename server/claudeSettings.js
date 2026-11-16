@@ -63,7 +63,6 @@ export function claudeSettingsRoutes(app, wrap) {
     res.json({
       envs: envs(),
       claudeMd: Object.fromEntries(envs().map((env) => [env, read(env)])),
-      efforts: envs().flatMap((env) => Object.entries(readModelSettings(env)).map(([model, v]) => ({ env, model, effort: v?.effortLevel ?? null }))),
     });
   });
 
@@ -75,17 +74,4 @@ export function claudeSettingsRoutes(app, wrap) {
     res.json({ ok: true });
   }));
 
-  app.put('/api/default-effort', wrap(async (req, res) => {
-    const env = String(req.body?.env ?? 'win');
-    const model = String(req.body?.model ?? '');
-    const effort = req.body?.effort ? String(req.body.effort) : null;
-    if (!envs().includes(env)) return res.status(400).json({ error: '環境不對。' });
-    if (!MODEL.test(model) || (effort && !EFFORT.test(effort))) return res.status(400).json({ error: '格式不對。' });
-    const json = readJson(env);
-    const entry = { ...(json.modelSettings?.[model] ?? {}) };
-    if (effort) entry.effortLevel = effort; else delete entry.effortLevel;
-    json.modelSettings = { ...(json.modelSettings ?? {}), [model]: entry };
-    writeAtomic(settingsFile(env), `${JSON.stringify(json, null, 2)}\n`);
-    res.json({ effort });
-  }));
 }

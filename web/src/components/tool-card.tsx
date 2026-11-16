@@ -84,7 +84,7 @@ export function ToolDetail({ tool }: { tool: Item }) {
         <pre className={cn(codeClass, tool.error && "text-danger")}>{(full || result.length <= LIMIT ? result : `${result.slice(0, LIMIT)}…`) || "（沒有輸出）"}</pre>
       ) : null}
       {tool.done && !full && result.length > LIMIT ? (
-        <Button className="justify-self-start" onClick={() => setFull(true)} size="sm" variant="ghost">顯示全部</Button>
+        <Button className="justify-self-start" onClick={() => setFull(true)} size="sm" variant="ghost">展開，共 {result.length.toLocaleString()} 字</Button>
       ) : null}
     </div>
   );

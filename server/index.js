@@ -121,6 +121,7 @@ function createSession(id, b) {
   if (PERMISSION_MODES.includes(b.permissionMode)) meta.permissionMode = b.permissionMode;
   if (typeof b.model === 'string') meta.model = b.model;
   if (typeof b.effort === 'string') meta.effort = b.effort;
+  remember({ model: meta.model, effort: meta.effort });
   st.sessions[id] = meta;
   // A folder picked from the browser joins the list, so it is one tap away next time.
   const addFolder = !temporary && !st.folders.includes(cwd);
@@ -274,6 +275,14 @@ app.delete('/api/folders', (req, res) => {
   store.save();
   res.json({ folders: s.folders });
 });
+
+/** The last model and effort picked become the next new conversation's choice. */
+function remember({ model, effort }) {
+  const s = store.get().settings;
+  if (typeof model === 'string' && model) s.model = model;
+  if (typeof effort === 'string' && effort) s.effort = effort;
+  store.save();
+}
 
 app.get('/api/settings', (_req, res) => res.json({ settings: store.get().settings }));
 app.put('/api/settings', (req, res) => {
@@ -442,8 +451,8 @@ wss.on('connection', (ws) => {
           if (!PERMISSION_MODES.includes(m.mode)) throw new Error('unknown mode');
           await r.setMode(m.mode);
           break;
-        case 'model': await r.setModel(m.model); break;
-        case 'effort': await r.setEffort(m.effort); break;
+        case 'model': await r.setModel(m.model); remember({ model: m.model }); break;
+        case 'effort': await r.setEffort(m.effort); remember({ effort: m.effort }); break;
         case 'restart': r.close(); break;
         case 'task-output':
           if (typeof m.task !== 'string') break;
