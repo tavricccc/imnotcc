@@ -251,20 +251,38 @@ export function ComposerSettings({ disabled, effort, mode, model, onEffort, onMo
       )}
       {compact && setting("model", "模型與 Effort",
         modelTrigger,
-        <div className="grid gap-5 pb-2">
-          {chosen.efforts ? (
-              <EffortSlider effort={effort} levels={chosen.efforts} onEffort={onEffort} />
-          ) : <p className="px-1 text-sm text-ink-muted">這個模型不支援調整 Effort。</p>}
-          <ListGroup label="模型" role="radiogroup">{main.map(row)}</ListGroup>
-          {more.length ? (
-            <div className="grid gap-2">
-              <button aria-expanded={showMore} className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setShowMore((v) => !v)} type="button">
-                <CaretRight className={cn("size-3 transition-transform", showMore && "rotate-90")} weight="bold" />更多模型（{more.length}）
+        view === "models" ? (
+          <div className="grid gap-3 pb-2">
+            <button className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setView("effort")} type="button">
+              <CaretRight className="size-3 rotate-180" weight="bold" />返回
+            </button>
+            <ListGroup label="模型" role="radiogroup">{main.filter((m) => m.value).map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.label} onSelect={() => { onModel(m.value); setView("effort"); }} selected={model === m.value} />)}</ListGroup>
+            {more.length ? (
+              <div className="grid gap-2">
+                <button aria-expanded={showMore} className="flex items-center gap-1 justify-self-start rounded-md px-1 text-sm text-ink-muted hover:text-ink" onClick={() => setShowMore((v) => !v)} type="button">
+                  <CaretRight className={cn("size-3 transition-transform", showMore && "rotate-90")} weight="bold" />更多模型（{more.length}）
+                </button>
+                {showMore ? <ListGroup label="更多模型" role="radiogroup">{more.map((m) => <ChoiceRow detail={m.detail} key={m.value} label={m.label} onSelect={() => { onModel(m.value); setView("effort"); }} selected={model === m.value} />)}</ListGroup> : null}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="grid gap-3 px-1 pb-4">
+            <div className="grid grid-cols-[2rem_1fr_2rem] items-center">
+              <span />
+              <span aria-live="polite" className="text-center text-base font-semibold text-contrast">{chosen.efforts ? effortName || (EFFORTS.find((e) => e.value === "medium")?.label ?? "medium") : "—"}</span>
+              <button aria-label="Effort 改回預設" className="grid size-8 place-items-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink disabled:opacity-40" disabled={!effort || !chosen.efforts} onClick={() => onEffort("")} type="button">
+                <ArrowCounterClockwise className="size-4" />
               </button>
-              {showMore ? <ListGroup label="更多模型" role="radiogroup">{more.map(row)}</ListGroup> : null}
             </div>
-          ) : null}
-        </div>)}
+            <button className="flex items-center gap-1 justify-self-center rounded-md px-2 py-1 text-sm text-ink-muted hover:text-ink" onClick={() => setView("models")} type="button">
+              {modelName}<CaretRight className="size-3" weight="bold" />
+            </button>
+            <div className="px-2 pt-1">
+              {chosen.efforts ? <EffortPill effort={effort} levels={chosen.efforts} onEffort={onEffort} /> : <p className="text-center text-sm text-ink-muted">這個模型不支援調整 Effort。</p>}
+            </div>
+          </div>
+        ))}
     </>
   );
 }
