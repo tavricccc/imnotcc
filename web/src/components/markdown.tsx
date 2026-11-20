@@ -23,12 +23,32 @@ DOMPurify.addHook("afterSanitizeAttributes", (node) => {
 
 const MAX_PREVIEWS = 8;
 
+// GFM autolinks only stop at whitespace, so "https://x.com。第一次" swallows the CJK text after it.
+// A bare URL never contains CJK or full-width punctuation; cut the link where they begin.
+const NOT_URL = /[⺀-鿿가-힯豈-﫿︰-﹏＀-￯　-〿‘-‟…]/;
+
+function trimAutolinks(root: DocumentFragment) {
+  for (const a of root.querySelectorAll("a")) {
+    const text = a.textContent ?? "";
+    let href = a.getAttribute("href") ?? "";
+    try { href = decodeURI(href); } catch { continue; }
+    if (a.childNodes.length !== 1 || !text || !href.endsWith(text)) continue;
+    const cut = text.search(NOT_URL);
+    if (cut <= 0) continue;
+    const kept = text.slice(0, cut).replace(/[.,;:!?)]+$/, "");
+    a.textContent = kept;
+    a.setAttribute("href", href.slice(0, href.length - text.length) + kept);
+    a.after(text.slice(kept.length));
+  }
+}
+
 // Points images at where they can load and lists the image paths the text names without showing.
 // Paths are rewritten before sanitizing, which would otherwise drop a src like "C:/…" as an
 // unknown scheme; a template's content is inert, so nothing in it loads or runs meanwhile.
 function render(text: string, session: string | null) {
   const box = document.createElement("template");
   box.innerHTML = marked.parse(text, { async: false, breaks: false, gfm: true }) as string;
+  trimAutolinks(box.content);
   const shown = new Set<string>();
   for (const img of box.content.querySelectorAll("img")) {
     const url = imageUrl(session, img.getAttribute("src") ?? "");

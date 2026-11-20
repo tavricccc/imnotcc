@@ -1,22 +1,23 @@
 import * as React from "react";
-import { ArrowRight, ArrowUp, Copy, FolderSimple, PencilSimple, Trash, FolderSimplePlus, GearSix, HardDrives, LinuxLogo, NotePencil, Plus, SidebarSimple, WindowsLogo } from "@phosphor-icons/react/ssr";
+import { ArrowRight, ArrowUp, Copy, FolderSimple, PencilSimple, Trash, FolderSimplePlus, GearSix, HardDrives, LinuxLogo, MagnifyingGlass, NotePencil, Plus, SidebarSimple, WindowsLogo, X } from "@phosphor-icons/react/ssr";
 import { toast } from "sonner";
 import { del, get, post } from "@/lib/api";
 import { clearCache } from "@/lib/cache";
-import { removeLocalTranscript } from "@/lib/local-transcript";
+import { clearComposerDraft, removeLocalTranscript } from "@/lib/local-transcript";
 import { RenameDialog } from "@/components/rename-dialog";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { useContextItems, type ContextItem } from "@/ui/context-menu";
 import { isTauri } from "@/lib/tauri";
 import { navigate } from "@/lib/app-navigation";
-import { ago, baseName, until } from "@/lib/format";
+import { ago, baseName } from "@/lib/format";
 import { onGlobal } from "@/lib/socket";
 import { useCached } from "@/lib/cache";
 import { prefs } from "@/lib/prefs";
 import { useSessions, type SessionRow } from "@/lib/resources";
 import { shared, type Plan } from "@/lib/store";
 import { useStore } from "@/lib/store-core";
-import { UsageRing, Meter } from "@/components/usage-ring";
+import { UsageRing } from "@/components/usage-ring";
+import { PlanRings } from "@/components/session-insights";
 import { AppLink } from "@/ui/app-link";
 import { Button } from "@/ui/button";
 import { Chip } from "@/ui/chip";
@@ -55,11 +56,19 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
     !!groups?.some((g) => envOf(g.cwd) === "wsl") || recent.some((s) => envOf(s.cwd) === "wsl")
   ));
   const env: Env = canSwitch ? sessionEnvironment : nativePosix ? "wsl" : "win";
-  const visibleGroups = groups?.filter((g) => envOf(g.cwd) === env).map((g) => ({
-    ...g,
-    sessions: projectSessionLimit === "all" ? g.sessions : g.sessions.slice(0, Number(projectSessionLimit)),
-  }));
-  const visibleRecent = recent.filter((s) => envOf(s.cwd) === env);
+  const [query, setQuery] = React.useState("");
+  const q = query.trim().toLowerCase();
+  const envGroups = groups?.filter((g) => envOf(g.cwd) === env);
+  const envRecent = recent.filter((s) => envOf(s.cwd) === env);
+  const hasAny = (envGroups?.length ?? 0) > 0 || envRecent.length > 0;
+  const sessionTitle = (s: SessionRow) => s.title || (s.temporary ? "Temp Chat" : "新的對話");
+  const visibleGroups = envGroups?.map((g) => {
+    if (!q) return { ...g, sessions: projectSessionLimit === "all" ? g.sessions : g.sessions.slice(0, Number(projectSessionLimit)) };
+    const folderHit = g.cwd.toLowerCase().includes(q) || baseName(g.cwd).toLowerCase().includes(q);
+    const sessions = folderHit ? g.sessions : g.sessions.filter((s) => sessionTitle(s).toLowerCase().includes(q));
+    return { ...g, sessions };
+  }).filter((g) => g.sessions.length > 0);
+  const visibleRecent = q ? envRecent.filter((s) => sessionTitle(s).toLowerCase().includes(q)) : envRecent;
   const [usageOpen, setUsageOpen] = React.useState(false);
 
   // ---- What can be done to one conversation: right-click it, or long-press it on a phone ----
@@ -128,6 +137,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
     try {
       await del(`/api/sessions/${row.id}`);
       void removeLocalTranscript(row.id).catch(() => {});
+      clearComposerDraft(row.id);
       clearCache(`/api/sessions/${row.id}`);
       if (row.id === activeId) navigate("/", { replace: true });
       void load();
@@ -136,9 +146,11 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
   const [usageStatus, setUsageStatus] = React.useState<"idle" | "loading" | "error">("idle");
 
   React.useEffect(() => {
-    const timer = setInterval(load, 30_000);
+    const refresh = () => { if (document.visibilityState === "visible") void load(); };
+    const timer = setInterval(refresh, 30_000);
+    document.addEventListener("visibilitychange", refresh);
     const off = onGlobal((m) => { if (m.kind === "running" && !m.running) void load(); });
-    return () => { clearInterval(timer); off(); };
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", refresh); off(); };
   }, [load]);
   React.useEffect(() => {
     if (sidebar) void load();
@@ -209,7 +221,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
             {!isTauri() && onToggleSidebar ? (
               <div className="mb-1 flex items-center justify-between px-1.5">
                 <div className="flex items-center gap-2 text-xs font-semibold tracking-wide text-ink-muted">
-                  <img alt="" className="size-4 rounded-[22.37%]" src="/icon.svg" />
+                  <img alt="" className="app-icon size-4" src="/icon.svg" />
                   <span>imnotcc</span>
                 </div>
                 <Button aria-label="收起側邊欄" onClick={onToggleSidebar} size="icon-sm" variant="ghost">
@@ -227,14 +239,39 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
         {canSwitch ? (
           <Segmented className={sidebar ? "mt-1.5 [&_[role=tablist]]:overflow-x-hidden [&_[role=tab]]:px-3" : undefined} label="執行環境" onChange={(value) => prefs.set({ sessionEnvironment: value })} options={environments} value={env} />
         ) : null}
+
+        {hasAny || q ? (
+          <div className={cn("relative", sidebar && "mt-1")}>
+            <MagnifyingGlass aria-hidden className={cn("pointer-events-none absolute top-1/2 -translate-y-1/2 text-ink-faint", sidebar ? "left-2.5 size-3.5" : "left-3.5 size-4")} />
+            <Input
+              aria-label="搜尋對話"
+              className={cn("[&::-webkit-search-cancel-button]:hidden", sidebar ? "h-8 pr-7 pl-8 text-sm" : "h-10 pr-9 pl-10 text-[0.9375rem]")}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Escape" && query) { e.preventDefault(); setQuery(""); } }}
+              placeholder="搜尋對話或資料夾"
+              type="search"
+              value={query}
+            />
+            {query ? (
+              <button aria-label="清除搜尋" className="absolute top-1/2 right-1.5 -translate-y-1/2 rounded-full p-1 text-ink-muted hover:bg-surface-hover hover:text-ink" onClick={() => setQuery("")} type="button">
+                <X size={sidebar ? 12 : 14} weight="bold" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       <div className={sidebar ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 pb-4" : "contents"}>
       {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到對話" />
         : !visibleGroups ? <LoadingList label="載入中" rows={3} />
         : !visibleGroups.length && !visibleRecent.length ? (
-          sidebar ? <p className="px-2 py-4 text-sm text-ink-muted">還沒有對話</p>
-            : <EmptyState action={<Button onClick={() => openDraft()} variant="primary"><Plus weight="bold" />開一個新的</Button>} description="開啟 Temp Chat 或選擇資料夾，就能跟 Claude Code 對話。" title="還沒有對話" />
+          q ? (
+            sidebar ? <p className="px-2 py-4 text-sm text-ink-muted">找不到符合「{query.trim()}」的對話</p>
+              : <EmptyState action={<Button onClick={() => setQuery("")}>清除搜尋</Button>} description="換個關鍵字試試看。" title={`找不到「${query.trim()}」`} />
+          ) : (
+            sidebar ? <p className="px-2 py-4 text-sm text-ink-muted">還沒有對話</p>
+              : <EmptyState action={<Button onClick={() => openDraft()} variant="primary"><Plus weight="bold" />開一個新的</Button>} description="開啟 Temp Chat 或選擇資料夾，就能跟 Claude Code 對話。" title="還沒有對話" />
+          )
         ) : sidebar ? (
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
             {visibleGroups.map((g) => (
@@ -311,8 +348,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
         <div className="grid gap-5 pb-2">
           {usageStatus === "error" && !plan ? <p className="text-sm text-danger" role="alert">無法更新用量。</p> : null}
           {usageStatus === "idle" && five == null && seven == null ? <p className="text-sm text-ink-muted" role="status">目前沒有方案用量資料。</p> : null}
-          <Meter label="5 小時" note={until(plan?.fiveHour?.resetsAt)} pct={five} value={five == null ? "—" : `${Math.round(five)}%`} />
-          <Meter label="每週" note={until(plan?.sevenDay?.resetsAt)} pct={seven} value={seven == null ? "—" : `${Math.round(seven)}%`} />
+          <PlanRings fiveHour={plan?.fiveHour} sevenDay={plan?.sevenDay} />
         </div>
       </Sheet>
     </div>

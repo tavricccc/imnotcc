@@ -70,7 +70,7 @@ function LocalStorageSettings() {
     if (!action) return;
     setBusy(true);
     try {
-      if (action === "all") { await clearLocalTranscripts(); clearCache("/api/sessions"); }
+      if (action === "all") { await clearLocalTranscripts(); clearCache("sessions"); clearCache("/api/sessions"); }
       else if (action === "old") { await removeLocalTranscripts(stats?.old ?? []); }
       else if (action === "swcache") { await Promise.all((await caches.keys()).map((k) => caches.delete(k))); }
       else draftKeys().forEach((k) => localStorage.removeItem(k));

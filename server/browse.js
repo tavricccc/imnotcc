@@ -36,6 +36,9 @@ export function listDir(where, p) {
     if (entries.length >= MAX_ENTRIES) break;
     const host = path.join(where.host, d.name);
     if (isSensitive(host)) continue;
+    if (d.isSymbolicLink()) {
+      try { if (isSensitive(fs.realpathSync(host))) continue; } catch {}
+    }
     let stat = null;
     try { stat = fs.statSync(host); } catch {} // a broken link
     entries.push({

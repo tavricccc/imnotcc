@@ -7,6 +7,7 @@ interface TauriWindowHandle {
   minimize: () => Promise<void>;
   toggleMaximize: () => Promise<void>;
   hide: () => Promise<void>;
+  close: () => Promise<void>;
 }
 
 function getCurrentTauriWindow(): TauriWindowHandle | null {
@@ -42,7 +43,7 @@ export function Titlebar({ sidebar }: { sidebar?: { collapsed: boolean; toggle: 
           if (e.button === 0) void getCurrentTauriWindow()?.startDragging();
         }}
       >
-        <img alt="" className="size-4 rounded-[22.37%]" src="/icon.svg" />
+        <img alt="" className="app-icon size-4" src="/icon.svg" />
         <span>imnotcc</span>
         {sidebar ? (
           <button
@@ -80,9 +81,9 @@ export function Titlebar({ sidebar }: { sidebar?: { collapsed: boolean; toggle: 
           </svg>
         </button>
         <button
-          aria-label="隱藏到系統匣"
+          aria-label="關閉（程式留在系統匣）"
           className="grid w-11 place-items-center transition-colors hover:bg-[#c42b1c] hover:text-white"
-          onClick={() => void getCurrentTauriWindow()?.hide()}
+          onClick={() => void getCurrentTauriWindow()?.close()}
           type="button"
         >
           <svg className="size-2.5 stroke-current" fill="none" strokeWidth="1.4" viewBox="0 0 10 10">

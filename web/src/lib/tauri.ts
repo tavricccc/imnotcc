@@ -75,9 +75,10 @@ export function useIsLocalHost(): boolean {
       setLocal(cachedLocalHost);
       return;
     }
-    localHostPromise ??= tauriInvoke<DesktopState>("get_state")
-      .then((st) => {
-        cachedLocalHost = !!st.config.local;
+    localHostPromise ??= tauriInvoke<boolean>("is_local_host")
+      .catch(() => tauriInvoke<DesktopState>("get_state").then((st) => !!st.config.local))
+      .then((v) => {
+        cachedLocalHost = !!v;
         return cachedLocalHost;
       })
       .catch(() => false);

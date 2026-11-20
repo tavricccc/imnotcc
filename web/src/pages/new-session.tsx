@@ -126,7 +126,7 @@ export function NewSessionPage({ cwd, environment, onStarted }: {
         </header>
       ) : null}
       <div className="content-in grid min-h-0 flex-1 content-center justify-items-center gap-3 overflow-hidden text-center">
-        <img alt="" className="size-10 rounded-icon md:size-12" src="/icon.svg" />
+        <img alt="" className="app-icon size-10 md:size-12" src="/icon.svg" />
         <h1 className="text-xl font-semibold md:text-3xl">想讓 Claude 做什麼？</h1>
       </div>
       <form className="relative pb-[max(0.75rem,var(--safe-bottom))] md:pb-5 [[data-keyboard]_&]:pb-2" onSubmit={(event) => { event.preventDefault(); void submit(); }}>

@@ -199,8 +199,9 @@ app.post('/api/sessions/:id/rename', wrap(async (req, res) => {
 
 // Takes the session off the list. Its transcript stays where Claude Code keeps it.
 app.delete('/api/sessions/:id', (req, res) => {
+  composerDrafts.delete(req.params.id);
   if (!requireSession(req, res)) return;
-  runners.runnerFor(req.params.id).close();
+  runners.forget(req.params.id);
   delete store.get().sessions[req.params.id];
   store.save();
   res.json({ ok: true });
@@ -405,12 +406,18 @@ server.on('upgrade', (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws));
 });
 
+// What is typed in each session's message box, so every device shows the same unsent text.
+// In memory only: each device also keeps its own copy, which it offers back after a restart.
+const COMPOSER_MAX = 200_000;
+const composerDrafts = new Map();
+
 wss.on('connection', (ws) => {
   const subs = new Set();
   const socketId = crypto.randomUUID();
   const send = (obj) => { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj)); };
   const off = runners.onEvent((id, event) => {
     if (id !== null && !subs.has(id)) return;
+    if (event.kind === 'composer' && event.from === socketId) return;
     if (event.kind === 'prompt') {
       const { from, ...rest } = event;
       return send({ session: id, ...rest, ...(from === socketId ? { images: [] } : {}) });
@@ -436,7 +443,23 @@ wss.on('connection', (ws) => {
     const r = runners.runnerFor(id);
     try {
       switch (m.t) {
-        case 'sub': subs.add(id); send({ session: id, ...r.snapshot() }); break;
+        case 'sub': {
+          subs.add(id);
+          send({ session: id, ...r.snapshot() });
+          const typed = composerDrafts.get(id);
+          if (typed) send({ session: id, kind: 'composer', text: typed.text, at: typed.at });
+          break;
+        }
+        case 'composer': {
+          if (typeof m.text !== 'string' || m.text.length > COMPOSER_MAX) break;
+          // A device that was offline offers its older text back; the newer one wins.
+          const at = Number.isFinite(m.at) ? Math.min(m.at, Date.now()) : Date.now();
+          const known = composerDrafts.get(id);
+          if (known && known.at > at) { send({ session: id, kind: 'composer', text: known.text, at: known.at }); break; }
+          composerDrafts.set(id, { text: m.text, at });
+          runners.emitTo(id, { kind: 'composer', text: m.text, at, from: socketId });
+          break;
+        }
         case 'unsub': subs.delete(id); break;
         case 'send': {
           const { text, images } = readPrompt(m);
@@ -468,9 +491,23 @@ wss.on('connection', (ws) => {
   });
 });
 
-const stop = () => { runners.closeAll(); process.exit(0); };
+let stopping = false;
+const stop = () => {
+  if (stopping) return;
+  stopping = true;
+  runners.closeAll();
+  for (const client of wss.clients) client.terminate();
+  wss.close();
+  server.close(() => process.exit(0));
+  server.closeAllConnections?.();
+  setTimeout(() => process.exit(0), 500).unref();
+};
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
+if (process.env.IMNOTCC_PARENT_PIPE === '1') {
+  process.stdin.resume();
+  process.stdin.on('end', stop);
+}
 
 // Loopback only: the public address reaches this machine through the Cloudflare tunnel.
 server.listen(PORT, '127.0.0.1', () => console.log(`[imnotcc] listening on http://127.0.0.1:${PORT}${DEV ? ' (dev)' : ''}`));

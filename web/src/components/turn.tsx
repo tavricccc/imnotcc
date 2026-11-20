@@ -219,10 +219,11 @@ export function FilesCard({ files, onOpen }: { files: FileChange[]; onOpen?: (pa
       <ul className="grid border-t border-line px-4 py-1.5 text-sm">
         {shown.map(([path, s]) => {
           const name = baseName(path);
+          const dir = path.endsWith(name) ? path.slice(0, path.length - name.length) : "";
           return (
             <li className="-mx-2 min-w-0" key={path}>
               <button className="flex w-full min-w-0 items-center gap-3 rounded-tile px-2 py-1.5 text-left outline-none hover:bg-surface-raised focus-visible:bg-surface-raised disabled:pointer-events-none" disabled={!onOpen} onClick={() => onOpen?.(path)} title={path} type="button">
-                <span className="min-w-0 flex-1 truncate text-ink-muted">{path.slice(0, path.length - name.length)}<span className="text-ink">{name}</span></span>
+                <span className="min-w-0 flex-1 truncate text-ink-muted">{dir}<span className="text-ink">{name}</span></span>
                 <Stats {...s} />
               </button>
             </li>

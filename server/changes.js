@@ -6,13 +6,13 @@
 // A snapshot is `git add -A` into a scratch index followed by `git write-tree`, the way
 // `git stash create` works: it adds loose objects to the repository, which git's own gc clears
 // once nothing points at them, and leaves the real index and the branch untouched.
+import crypto from 'node:crypto';
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as wsl from './wsl.js';
 
 const DISTRO = process.env.IMNOTCC_WSL_DISTRO || 'Ubuntu';
-const SCRATCH = 'imnotcc-index';
 
 function git(cwd, args, env = {}) {
   const base = ['-c', 'core.quotepath=false', ...args];
@@ -35,8 +35,9 @@ function hostPath(cwd, p) {
 /** The working tree as a tree id, or null when the folder is not in a git repository. */
 export async function snapshot(cwd) {
   let scratch;
+  const scratchName = `imnotcc-index-${crypto.randomUUID()}`;
   try {
-    const [index, scratchPath, top] =(await git(cwd, ['rev-parse', '--git-path', 'index', '--git-path', SCRATCH, '--show-toplevel'])).trim().split(/\r?\n/);
+    const [index, scratchPath, top] = (await git(cwd, ['rev-parse', '--git-path', 'index', '--git-path', scratchName, '--show-toplevel'])).trim().split(/\r?\n/);
     scratch = scratchPath;
     // Starting from the real index keeps git's stat cache, so unchanged files are not hashed again.
     try { fs.copyFileSync(hostPath(cwd, index), hostPath(cwd, scratch)); } catch { /* a repository with no index yet */ }
@@ -46,7 +47,11 @@ export async function snapshot(cwd) {
   } catch {
     return null;
   } finally {
-    if (scratch) fs.rm(hostPath(cwd, scratch), { force: true }, () => {});
+    if (scratch) {
+      const target = hostPath(cwd, scratch);
+      fs.rm(target, { force: true }, () => {});
+      fs.rm(`${target}.lock`, { force: true }, () => {});
+    }
   }
 }
 

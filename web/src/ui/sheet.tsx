@@ -7,6 +7,7 @@ import { timing } from "@/lib/motion-timing";
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
 import { useCompactViewport } from "./use-compact-viewport";
+import { focusPanel } from "./open-focus";
 
 // How far, or how fast, the grabber has to be pulled before letting go puts the sheet away.
 const DISMISS_DISTANCE = 120;
@@ -95,7 +96,7 @@ export function Sheet({
                 transition={timing("sheet", "nav")}
               />
             </Dialog.Overlay>
-            <Dialog.Content asChild forceMount {...(description ? {} : { "aria-describedby": undefined })}>
+            <Dialog.Content asChild forceMount onOpenAutoFocus={focusPanel} {...(description ? {} : { "aria-describedby": undefined })}>
               <motion.div
                 animate={compact ? { y: 0 } : { opacity: 1, scale: 1 }}
                 className={cn(

@@ -23,14 +23,17 @@ const q = (session: string, what: string, params: Record<string, string | undefi
 
 /** GETs `url` (none when null), forgetting the last answer while a new one loads. */
 function useGet<T>(url: string | null) {
-  const [state, setState] = React.useState<{ url?: string; data?: T; error?: string }>({});
+  const [nonce, setNonce] = React.useState(0);
+  const [state, setState] = React.useState<{ url?: string; nonce?: number; data?: T; error?: string }>({});
   React.useEffect(() => {
     if (!url) return;
     let live = true;
-    get<T>(url).then((data) => { if (live) setState({ url, data }); }).catch((e) => { if (live) setState({ url, error: (e as Error).message }); });
+    get<T>(url).then((data) => { if (live) setState({ url, nonce, data }); }).catch((e) => { if (live) setState({ url, nonce, error: (e as Error).message }); });
     return () => { live = false; };
-  }, [url]);
-  return state.url === url ? state : {};
+  }, [url, nonce]);
+  const reload = React.useCallback(() => setNonce((n) => n + 1), []);
+  const hit = url && state.url === url && state.nonce === nonce ? state : {};
+  return { ...hit, reload };
 }
 
 export function FilesTitle({ path, session }: { path?: string; session: string }) {
@@ -81,7 +84,7 @@ export function FilesBody({ mode = "name", path, query, session }: BrowseState &
           options={[{ label: "檔名", value: "name" }, { label: "內容", value: "content" }]} value={mode} />
       </form>
       {query ? <Results back={back} mode={mode} path={here} query={query} session={session} />
-        : tree.error ? <ErrorState message={tree.error} retryLabel="重試" title="打不開這個資料夾" />
+        : tree.error ? <ErrorState message={tree.error} onRetry={tree.reload} retryLabel="重試" title="打不開這個資料夾" />
         : !tree.data ? <LoadingList label="載入中" rows={4} />
         : <Entries back={back} go={go} session={session} tree={tree.data} />}
     </div>
@@ -124,7 +127,7 @@ function Entries({ back, go, session, tree }: { back: BrowseState; go: (s: Brows
 
 function Results({ back, mode, path, query, session }: { back: BrowseState; mode: "name" | "content"; path?: string; query: string; session: string }) {
   const found = useGet<Found>(q(session, "search", { path, q: query, mode }));
-  if (found.error) return <ErrorState message={found.error} retryLabel="重試" title="搜尋失敗" />;
+  if (found.error) return <ErrorState message={found.error} onRetry={found.reload} retryLabel="重試" title="搜尋失敗" />;
   if (!found.data) return <LoadingList label="載入中" rows={4} />;
   const { results, truncated, path: root } = found.data;
   if (!results.length) return <p className="py-8 text-center text-[0.875rem] text-ink-muted">找不到「{query}」</p>;

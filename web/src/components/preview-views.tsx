@@ -8,7 +8,7 @@ import { ArrowSquareOut, DownloadSimple, FolderOpen, Globe } from "@phosphor-ico
 import { get, post } from "@/lib/api";
 import { baseName, formatBytes } from "@/lib/format";
 import { looksLikePath, parseRef, type FileKind } from "@/lib/file-mentions";
-import { openPreview } from "@/lib/preview";
+import { openPreview, refreshPreview } from "@/lib/preview";
 import { tauriInvoke, useIsLocalHost } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { highlightLines } from "@/lib/highlight";
@@ -28,6 +28,7 @@ export function useFile(session: string | undefined, path: string | undefined, v
   React.useEffect(() => {
     if (!session || !path) return;
     let live = true;
+    setState((prev) => (prev.path === path ? { data: prev.data, path } : {}));
     get<FileData>(fileUrl(session, "file", path))
       .then((data) => { if (live) setState({ data, path }); })
       .catch((e) => { if (live) setState({ error: (e as Error).message, path }); });
@@ -38,7 +39,7 @@ export function useFile(session: string | undefined, path: string | undefined, v
 }
 
 export function FileBody({ file: { data, error }, line, session, source }: { file: { data?: FileData; error?: string }; line?: number; session: string; source: boolean }) {
-  if (error) return <ErrorState message={error} retryLabel="重試" title="打不開這個檔案" />;
+  if (error) return <ErrorState message={error} onRetry={refreshPreview} retryLabel="重試" title="打不開這個檔案" />;
   if (!data) return <LoadingList label="載入中" rows={3} />;
   const raw = fileUrl(session, "raw", data.path);
   const body = data.kind === "image" ? <img alt={data.name} className="mx-auto max-w-full rounded-tile" src={raw} />

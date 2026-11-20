@@ -39,8 +39,9 @@ export function parsePatch(patch: string): Row[] {
 
 type Line = Extract<Row, { kind: "line" }>;
 export function DiffBody({ target }: { target: DiffTarget }) {
+  const [nonce, setNonce] = React.useState(0);
   const [state, setState] = React.useState<{ key?: string; patch?: string; error?: string }>({});
-  const key = `${target.session}\n${target.turn}\n${target.path}`;
+  const key = `${target.session}\n${target.turn}\n${target.path}\n${nonce}`;
   React.useEffect(() => {
     let live = true;
     get<{ patch: string }>(`/api/sessions/${encodeURIComponent(target.session)}/diff?turn=${encodeURIComponent(target.turn)}&path=${encodeURIComponent(target.path)}`)
@@ -66,7 +67,7 @@ export function DiffBody({ target }: { target: DiffTarget }) {
         </div>
       ) : null}
       {state.key !== key ? <LoadingList label="載入中" rows={3} />
-        : state.error ? <ErrorState message={state.error} retryLabel="重試" title="看不到這個變更" />
+        : state.error ? <ErrorState message={state.error} onRetry={() => setNonce((n) => n + 1)} retryLabel="重試" title="看不到這個變更" />
         : !rows.length ? <p className="py-6 text-sm text-ink-muted">{state.patch === "" ? "二進位檔案，沒有逐行的變更可以顯示。" : "沒有內容上的變更。"}</p>
         : <DiffRows name={target.path} rows={rows} />}
     </div>

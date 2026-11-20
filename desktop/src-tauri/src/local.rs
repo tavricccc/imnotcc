@@ -17,6 +17,7 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 const MIN_NODE_MAJOR: u32 = 20;
+const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
 
 pub fn app_dir(app: &AppHandle) -> PathBuf {
     base_dir(app).join("server-app")
@@ -129,12 +130,19 @@ fn hidden(cmd: &str) -> Command {
 
 /// "v24.1.0" when Node.js 20+ is on PATH, otherwise a message saying what is missing.
 pub fn node_version() -> Result<String, String> {
+    use std::sync::OnceLock;
+    static NODE_VERSION: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+    let cache = NODE_VERSION.get_or_init(|| Mutex::new(None));
+    if let Some(v) = cache.lock().unwrap().clone() {
+        return Ok(v);
+    }
     let out = hidden("node").arg("--version").output().map_err(|_| "找不到 Node.js（node 不在 PATH 上）".to_string())?;
     let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
     let major: u32 = v.trim_start_matches('v').split('.').next().and_then(|m| m.parse().ok()).ok_or(format!("看不懂 node --version 的輸出：{v}"))?;
     if major < MIN_NODE_MAJOR {
         return Err(format!("Node.js 版本是 {v}，需要 {MIN_NODE_MAJOR} 以上"));
     }
+    *cache.lock().unwrap() = Some(v.clone());
     Ok(v)
 }
 
@@ -195,10 +203,21 @@ struct Inner {
     want: bool,
     generation: u64,
     pid: Option<u32>,
+    stdin: Option<std::process::ChildStdin>,
 }
 
 #[derive(Default, Clone)]
 pub struct Supervisor(Arc<Mutex<Inner>>);
+
+fn rotate_log(log_path: &Path) {
+    let Ok(meta) = fs::metadata(log_path) else { return };
+    if meta.len() <= MAX_LOG_BYTES {
+        return;
+    }
+    let backup = log_path.with_extension("log.1");
+    let _ = fs::remove_file(&backup);
+    let _ = fs::rename(log_path, &backup);
+}
 
 impl Supervisor {
     pub fn is_running(&self) -> bool {
@@ -240,6 +259,7 @@ impl Supervisor {
         while self.current(gen) {
             let log_path = log_dir(app).join("server.log");
             let _ = fs::create_dir_all(data_dir(app));
+            rotate_log(&log_path);
             let log = OpenOptions::new().create(true).append(true).open(&log_path);
             let (out, err) = match log.and_then(|f| Ok((f.try_clone()?, f))) {
                 Ok((a, b)) => (Stdio::from(a), Stdio::from(b)),
@@ -253,7 +273,8 @@ impl Supervisor {
                 .env("IMNOTCC_DATA_DIR", data_dir(app))
                 .env("IMNOTCC_PORT", local_port(app).to_string())
                 .env("IMNOTCC_ORIGINS", origins)
-                .stdin(Stdio::null())
+                .env("IMNOTCC_PARENT_PIPE", "1")
+                .stdin(Stdio::piped())
                 .stdout(out)
                 .stderr(err)
                 .spawn();
@@ -262,9 +283,28 @@ impl Supervisor {
                     if !join_job(&c) {
                         note(&log_path, "[imnotcc desktop] could not tie the server to the app; it may outlive a crash");
                     }
-                    self.0.lock().unwrap().pid = Some(c.id());
+                    let stopped_early = {
+                        let mut s = self.0.lock().unwrap();
+                        if !s.want || s.generation != gen {
+                            true
+                        } else {
+                            s.pid = Some(c.id());
+                            s.stdin = c.stdin.take();
+                            false
+                        }
+                    };
+                    if stopped_early {
+                        drop(c.stdin.take());
+                        let _ = hidden("taskkill").args(["/PID", &c.id().to_string(), "/T", "/F"]).status();
+                        let _ = c.wait();
+                        break;
+                    }
                     let status = c.wait();
-                    self.0.lock().unwrap().pid = None;
+                    {
+                        let mut s = self.0.lock().unwrap();
+                        s.pid = None;
+                        s.stdin = None;
+                    }
                     note(&log_path, &format!("[imnotcc desktop] server exited: {status:?}"));
                 }
                 Err(e) => note(&log_path, &format!("[imnotcc desktop] could not start node: {e}")),
@@ -280,16 +320,24 @@ impl Supervisor {
 
     /// Stop the server and every process it started (Claude Code runs as its children).
     pub fn stop(&self) {
-        let pid = {
+        let (pid, stdin) = {
             let mut s = self.0.lock().unwrap();
             s.want = false;
-            s.pid
+            (s.pid, s.stdin.take())
         };
+        // Closing stdin notifies server/index.js (IMNOTCC_PARENT_PIPE=1) to shut down cleanly.
+        drop(stdin);
         if let Some(pid) = pid {
-            let _ = hidden("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).status();
-            let end = Instant::now() + Duration::from_secs(5);
-            while self.0.lock().unwrap().pid.is_some() && Instant::now() < end {
-                thread::sleep(Duration::from_millis(100));
+            let graceful_end = Instant::now() + Duration::from_millis(2500);
+            while self.0.lock().unwrap().pid.is_some() && Instant::now() < graceful_end {
+                thread::sleep(Duration::from_millis(50));
+            }
+            if self.0.lock().unwrap().pid.is_some() {
+                let _ = hidden("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).status();
+                let kill_end = Instant::now() + Duration::from_millis(2500);
+                while self.0.lock().unwrap().pid.is_some() && Instant::now() < kill_end {
+                    thread::sleep(Duration::from_millis(50));
+                }
             }
         }
     }
@@ -342,7 +390,17 @@ fn package_version(dir: &Path) -> Option<String> {
 
 /// WSL is present on this PC.
 fn wsl_present() -> bool {
-    hidden("wsl.exe").args(["-l", "-q"]).output().map(|o| o.status.success()).unwrap_or(false)
+    use std::sync::OnceLock;
+    static WSL_CACHE: OnceLock<Mutex<Option<(Instant, bool)>>> = OnceLock::new();
+    let cache = WSL_CACHE.get_or_init(|| Mutex::new(None));
+    if let Some((at, present)) = *cache.lock().unwrap() {
+        if at.elapsed() < Duration::from_secs(60) {
+            return present;
+        }
+    }
+    let present = hidden("wsl.exe").args(["-l", "-q"]).output().map(|o| o.status.success()).unwrap_or(false);
+    *cache.lock().unwrap() = Some((Instant::now(), present));
+    present
 }
 
 /// WSL is there but the Linux Claude Code at the SDK's version is not installed yet.

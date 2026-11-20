@@ -8,13 +8,14 @@ import {
 import { del, get, post } from "@/lib/api";
 import { goBack, navigate } from "@/lib/app-navigation";
 import { cached, clearCache, refreshCached, setCached } from "@/lib/cache";
-import { WINDOWS, baseName, tokens, until } from "@/lib/format";
+import { WINDOWS, baseName, tokens } from "@/lib/format";
 import { conn, send, subscribe } from "@/lib/socket";
+import { useComposerSync } from "@/lib/composer-sync";
 import { shared, TERMINAL_ONLY } from "@/lib/store";
 import { useStore } from "@/lib/store-core";
 import { addMessage, addNote, createTranscript, type Item, type Transcript } from "@/lib/transcript";
 import { cn } from "@/lib/utils";
-import { mergeTranscript, readLocalTranscript, removeLocalTranscript, restoreTranscript, saveLocalTranscript } from "@/lib/local-transcript";
+import { clearComposerDraft, mergeTranscript, readLocalTranscript, removeLocalTranscript, restoreTranscript, saveLocalTranscript } from "@/lib/local-transcript";
 import type { FirstPrompt, PickedImage } from "@/lib/prompt";
 import { attachmentLine, uploadFile } from "@/lib/upload";
 import { Composer } from "@/components/composer";
@@ -31,7 +32,9 @@ import { BackgroundTasks, type BackgroundTask } from "@/components/background-ta
 import { FilesCard, TurnWork } from "@/components/turn";
 import { isStep, turnRows, type FileChange } from "@/lib/turns";
 import { BUSY_SEND_LABEL, prefs, reduceMotion } from "@/lib/prefs";
-import { Meter, UsageRing } from "@/components/usage-ring";
+import { UsageRing } from "@/components/usage-ring";
+import { ContextChart, PlanRings, RunStats, Section } from "@/components/session-insights";
+import { INSPECTOR_WIDTH, SessionInspector } from "@/components/session-inspector";
 import { Button } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Dialog } from "@/ui/dialog";
@@ -48,7 +51,7 @@ import { useVisualViewport } from "@/ui/use-visual-viewport";
 
 interface Meta { id: string; cwd: string; title?: string; temporary?: boolean }
 interface History { messages: unknown[]; start: number; total: number }
-interface Context { used: number; threshold: number; max: number; categories?: { name: string; tokens: number }[] }
+interface Context { used: number; threshold: number | null; max: number; categories?: { name: string; tokens: number }[] }
 interface Queued { uuid: string; text: string; images: number }
 interface LiveState {
   queued: Queued[];
@@ -101,7 +104,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   });
   const transcript = React.useRef(initialTranscript);
   const transcriptVersion = React.useRef(0);
-  const [, setVersion] = React.useState(0);
+  const [version, setVersion] = React.useState(0);
   const [page, setPage] = React.useState({ start: initialHistory?.start ?? 0, total: initialHistory?.total ?? 0, loadingEarlier: false });
   // What each turn changed, by its prompt, as git counted it on the server.
   const [changes, setChanges] = React.useState<Record<string, FileChange[]>>({});
@@ -159,6 +162,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     }
   };
   const input = React.useRef<HTMLTextAreaElement>(null);
+  useComposerSync(id, text, setText, input);
   const follow = React.useRef(!!initialHistory);
   // Whether new output should keep the view at the bottom: on while the reader sits at the
   // bottom, off as soon as they scroll up, back on when they return to the bottom.
@@ -174,6 +178,9 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   // The panel beside the chat pushes it over; one for another session is closed.
   const sidePreview = wide && previewing?.session === id;
   React.useEffect(() => () => { if (preview.get().target?.session === id) closePreview(); }, [id]);
+  // On a wide screen the inspector holds what the usage sheet does; the preview takes its place.
+  const inspector = wide && view.inspector && !sidePreview;
+  React.useEffect(() => { if (inspector) send(id, { t: "usage" }); }, [id, inspector]);
 
   React.useLayoutEffect(() => {
     const el = scrollArea.current;
@@ -274,7 +281,8 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     if (!page.start || page.loadingEarlier) return;
     const el = scrollArea.current;
     if (!el) return;
-    const below = el.scrollHeight - el.scrollTop;
+    const container = el;
+    const below = container.scrollHeight - container.scrollTop;
     const startAt = Math.max(0, page.start - 100);
     const url = `${sessionUrl}/messages?limit=${page.total - startAt}&before=${page.total}`;
     function show(history: History) {
@@ -283,22 +291,28 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       follow.current = false;
       combineHistory(transcript.current, history, true);
       queueArchive();
+      setVersion((v) => v + 1);
       setPage((p) => ({ ...p, start: history.start, loadingEarlier: false }));
-      requestAnimationFrame(() => { el.scrollTop = el.scrollHeight - below; });
+      requestAnimationFrame(() => { container.scrollTop = container.scrollHeight - below; });
     }
     const previous = cached<History>(url);
     if (previous) show(previous);
     else setPage((p) => ({ ...p, loadingEarlier: true }));
-    const version = transcriptVersion.current;
+    const reqVersion = transcriptVersion.current;
     try {
       // Rebuild from the new start to the end in one read, so a tool and its result always meet.
       const fresh = await refreshCached(url, () => get<History>(url));
-      if (!previous && version === transcriptVersion.current) show(fresh);
+      if (!previous && reqVersion === transcriptVersion.current) show(fresh);
       else setPage((p) => ({ ...p, loadingEarlier: false }));
     } catch {
       setPage((p) => ({ ...p, loadingEarlier: false }));
     }
   }
+  const loadEarlierRef = React.useRef<() => void>(() => {});
+  loadEarlierRef.current = () => { void loadEarlier(); };
+  const onLoadEarlier = React.useCallback(() => loadEarlierRef.current(), []);
+  const retryLoadRef = React.useRef<() => void>(() => {});
+  const onRetryLoad = React.useCallback(() => retryLoadRef.current(), []);
 
   React.useEffect(() => {
     let snapshots = 0;
@@ -317,9 +331,9 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
 
     async function updateHistory(force = false) {
       void loadChanges();
-      const version = transcriptVersion.current;
+      const reqVersion = transcriptVersion.current;
       const [history] = await Promise.all([loadHistory(), localHistory]);
-      if (gone || version !== transcriptVersion.current) return;
+      if (gone || reqVersion !== transcriptVersion.current) return;
       transcriptVersion.current++;
       combineHistory(transcript.current, history);
       queueArchive();
@@ -328,6 +342,15 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       if (force) jump.current = true;
       bump(force ? "force" : "near");
     }
+
+    retryLoadRef.current = () => {
+      if (gone) return;
+      setLoadError("");
+      void loadMeta().then((m) => { if (!gone) setMeta(m); }).catch(() => {});
+      void updateHistory(true).catch((e: Error) => {
+        if (!gone && !transcript.current.items.length) setLoadError(e.message);
+      });
+    };
 
     function onSdk(msg: any) {
       transcriptVersion.current++;
@@ -451,16 +474,14 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   const running = s.status === "running";
   // Bubble mode can hide thinking and tools. The composer's stop button already says a turn is running.
   const hideWork = view.bubbles && view.hideWork;
-  // While a turn runs, a shimmering line stays at the bottom the whole time, so the transcript
-  // does not jump as steps start and finish; it names the tool at work when bubble mode hides it.
-  const busyTool = running ? t.items.findLast((it) => it.type === "tool" && !it.done) : undefined;
-  const status = !running ? null : busyTool && hideWork ? `正在使用 ${busyTool.name}` : "思考中";
   // A question waits at the bottom in place of the composer; other requests stay in the transcript.
   const question = s.pending.find((p) => p.tool === "AskUserQuestion");
+  const inlinePending = React.useMemo(() => s.pending.filter((p) => p !== question), [s.pending, question]);
   // The composer only rises back in after a question took its place, not on first load.
   const dockSwapped = React.useRef(false);
   if (question) dockSwapped.current = true;
-  const contextPct = s.context?.threshold ? (s.context.used / s.context.threshold) * 100 : null;
+  const contextLimit = s.context ? (s.context.threshold && s.context.threshold < s.context.max ? s.context.threshold : s.context.max) : 0;
+  const contextPct = s.context && contextLimit ? (s.context.used / contextLimit) * 100 : null;
   const title = meta?.title || (meta?.temporary ? "Temp Chat" : "新的對話");
 
   // ---- Composer and slash commands ----
@@ -531,7 +552,8 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   }
 
   const interrupt = () => send(id, { t: "interrupt" });
-  const answer = (req: PermissionRequest, a: Answer) => send(id, { t: "answer", id: req.id, ...a });
+  const answer = React.useCallback((req: PermissionRequest, a: Answer) => send(id, { t: "answer", id: req.id, ...a }), [id]);
+  const openDiff = React.useCallback((turn: string, path: string, files: FileChange[]) => openPreview({ kind: "diff", session: id, turn, path, files }), [id]);
 
   // ---- Session actions ----
   async function fork() {
@@ -567,13 +589,6 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
   // Shared with the preview panel, which lists them.
   React.useEffect(() => { backgroundTasks.set({ [id]: s.tasks }); }, [id, s.tasks]);
   React.useEffect(() => () => backgroundTasks.set({ [id]: [] }), [id]);
-  const tasksChip = <BackgroundTasks session={id} tasks={s.tasks} />;
-  const shownItems = (hideWork ? t.items.filter((it) => it.type !== "tool" && it.type !== "thinking") : t.items)
-    .filter((it, i, all) => !(isInterrupt(it) && isInterrupt(all.slice(0, i).findLast((p) => !isStep(p)))));
-  const rows = view.groupTools ? turnRows(shownItems, running, changes) : null;
-  const lastRow = rows?.at(-1);
-  // The background-work label sits beside the last reply's copy button when there is one.
-  const tasksBesideCopy = !running && lastRow?.kind === "copy";
   const currentWindow = s.context?.max ? tokens(s.context.max) : null;
 
   return (
@@ -581,7 +596,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:top-[var(--safe-top)] md:left-[var(--desktop-inset)] md:h-[calc(100dvh-var(--safe-top))] md:overflow-hidden md:rounded-tl-2xl md:border-t md:border-l md:border-line md:bg-surface md:[--edge-fade:var(--surface)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace}>
       <div
         className="relative flex min-h-0 flex-1 flex-col motion-safe:transition-[margin-right] motion-safe:duration-[var(--preview-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]"
-        style={sidePreview ? { marginRight: "var(--preview-width, 0px)" } : undefined}
+        style={sidePreview ? { marginRight: "var(--preview-width, 0px)" } : inspector ? { marginRight: INSPECTOR_WIDTH } : undefined}
       >
       {/* Phones: a floating glass pill. Desktop: a flat bar across the pane, the title at the
           left as a menu button (folder, title, caret) and the controls at the right. */}
@@ -600,29 +615,39 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
             <CaretDown className="hidden size-3 shrink-0 text-ink-muted md:block" weight="bold" />
           </button>
           <span className="hidden flex-1 md:block" />
-          <Button aria-label="檔案" onClick={() => openPreview({ kind: "files", session: id, path: meta?.cwd })} size="icon" title="檔案" variant="ghost"><FolderOpen /></Button>
-          <UsageRing className="size-10 border-0 bg-transparent md:size-8" label={`Context ${contextPct == null ? "尚無資料" : `${Math.round(contextPct)}%`}`} onClick={() => { send(id, { t: "usage" }); setSheet("usage"); }} pct={contextPct} />
-          <Button aria-label="對話選項" onClick={() => setSheet("options")} size="icon" variant="ghost"><DotsThree weight="bold" /></Button>
+          <Button aria-label="檔案" className={cn(inspector && "md:hidden")} onClick={() => openPreview({ kind: "files", session: id, path: meta?.cwd })} size="icon" title="檔案" variant="ghost"><FolderOpen /></Button>
+          <UsageRing className="size-10 border-0 bg-transparent md:size-8" label={`Context ${contextPct == null ? "尚無資料" : `${Math.round(contextPct)}%`}`} onClick={() => {
+            send(id, { t: "usage" });
+            if (!wide) return setSheet("usage");
+            if (sidePreview) { closePreview(); prefs.set({ inspector: true }); } else prefs.set({ inspector: !view.inspector });
+          }} pct={contextPct} />
+          <Button aria-label="對話選項" className={cn(inspector && "md:hidden")} onClick={() => setSheet("options")} size="icon" variant="ghost"><DotsThree weight="bold" /></Button>
         </div>
       </header>
       <EdgeBlur className="chat-edge-blur absolute h-[calc(var(--chat-header-height,0px)+1.25rem)]" side="top" />
       <div className="absolute inset-0 overflow-y-auto overscroll-contain" ref={scrollArea}>
-          <main className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-3.5 px-[var(--gutter)] pb-[calc(var(--chat-composer-height,0px)+1rem)] pt-[calc(var(--chat-header-height,0px)+1rem)] md:px-8">
-            {loadError ? <ErrorState message={loadError} retryLabel="重試" title="打不開這個對話" /> : null}
-            {page.start > 0 ? (
-              <Button className="justify-self-center" onClick={() => void loadEarlier()} size="sm" status={page.loadingEarlier ? "loading" : "idle"} variant="ghost">載入更早的訊息</Button>
-            ) : null}
-            {!rows ? shownItems.map((item) => <Entry bubbles={view.bubbles} item={item} key={item.key} />)
-              : rows.map((row) => row.kind === "work"
-                ? <TurnWork end={row.end} items={row.items} key={row.key} live={row.live} start={row.start} />
-                : row.kind === "copy" ? <CopyTurn extra={row === lastRow && tasksBesideCopy ? tasksChip : null} key={row.key} text={row.text} />
-                : row.kind === "files" ? <FilesCard files={row.files} key={row.key} onOpen={(path) => openPreview({ kind: "diff", session: id, turn: row.turn, path, files: row.files })} />
-                : <Entry bubbles={view.bubbles} item={row.item} key={row.item.key} />)}
-            {s.drafting ? <Draft className={cn("content-in", view.bubbles ? BUBBLE : "draft-stream")} onGrow={followDraft} source={draft.current} /> : null}
-            {s.pending.filter((p) => p !== question).map((p) => <PermissionCard key={p.id} onAnswer={(a) => answer(p, a)} req={p} />)}
-            {s.tasks.length > 0 && !tasksBesideCopy ? <div className="-mt-2 justify-self-start">{tasksChip}</div> : null}
-            {status ? <p className="message-in justify-self-start text-[0.9375rem]" key={status} role="status"><span className="shimmer">{status}</span></p> : null}
-          </main>
+        <TranscriptList
+          bubbles={view.bubbles}
+          changes={changes}
+          draft={draft.current}
+          drafting={s.drafting}
+          followDraft={followDraft}
+          groupTools={view.groupTools}
+          hasEarlier={page.start > 0}
+          hideWork={hideWork}
+          loadError={loadError}
+          loadingEarlier={page.loadingEarlier}
+          onAnswer={answer}
+          onLoadEarlier={onLoadEarlier}
+          onOpenDiff={openDiff}
+          onRetryLoad={onRetryLoad}
+          pending={inlinePending}
+          running={running}
+          session={id}
+          tasks={s.tasks}
+          transcript={transcript}
+          version={version}
+        />
       </div>
       <EdgeBlur className="chat-edge-blur absolute h-[calc(var(--chat-composer-height,0px)+1.25rem)]" side="bottom" />
       <div className="pointer-events-none relative z-30 mt-auto shrink-0 px-[var(--gutter)] pb-[max(0.75rem,var(--safe-bottom))] md:px-8 md:pb-5 [[data-keyboard]_&]:pb-2 [&>div]:pointer-events-auto [&>form>div]:pointer-events-auto" ref={composer}>
@@ -672,6 +697,14 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       </div>
       </div>
       <PreviewPanel />
+      {inspector ? (
+        <SessionInspector
+          context={s.context} cost={s.cost} cwd={meta?.cwd}
+          onClose={() => prefs.set({ inspector: false })} onCompact={() => command("/compact")} onFiles={() => openPreview({ kind: "files", session: id, path: meta?.cwd })} onRemove={() => setSheet("remove")} onCopyResume={() => void copyResume()}
+          onFork={() => void fork()} onRename={() => setSheet("rename")} onRestart={restart} onWindow={() => setSheet("window")}
+          online={online} open={s.open} plan={plan} running={running} session={id} tasks={s.tasks}
+        />
+      ) : null}
 
       {/* Session options: what it runs with, then what can be done to it. */}
       <Sheet description={meta?.cwd} onOpenChange={(o) => setSheet(o ? "options" : null)} open={sheet === "options"} title={title}>
@@ -695,29 +728,15 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       <WindowSheet current={currentWindow} onOpenChange={(o) => setSheet(o ? "window" : null)} onPick={(size) => command(`/autocompact ${size}`)} open={sheet === "window"} />
 
       <Sheet onOpenChange={(o) => setSheet(o ? "usage" : null)} open={sheet === "usage"} title="用量">
-        <div className="grid gap-6 pb-2">
-          <div className="grid gap-5">
-            <Meter
-              label="Context"
-              note={s.context ? `到 ${tokens(s.context.threshold)} 時自動壓縮（window ${tokens(s.context.max)}）` : "回覆一次之後才有資料。"}
-              pct={contextPct}
-              value={s.context ? `${tokens(s.context.used)} / ${tokens(s.context.threshold)}` : "—"}
-            />
-            {([["方案 5 小時", plan?.fiveHour], ["方案 7 天", plan?.sevenDay]] as const).map(([name, w]) => (
-              <Meter key={name} label={name} note={w ? until(w.resetsAt) : undefined} pct={w?.pct ?? null} value={w ? `${Math.round(w.pct)}%` : "—"} />
-            ))}
-          </div>
-          {s.context?.categories?.length ? (
-            <ListGroup title="Context 組成">
-              {s.context.categories.map((c) => <ListRow key={c.name} label={c.name} trailing={<span className="text-[0.9375rem] tabular-nums text-ink-muted">{tokens(c.tokens)}</span>} />)}
-            </ListGroup>
-          ) : null}
-          {s.cost ? (
-            <ListGroup title="這個對話（本次啟動）">
-              <ListRow label="費用（等值）" trailing={<span className="text-[0.9375rem] tabular-nums text-ink-muted">${s.cost.usd.toFixed(2)}</span>} />
-              <ListRow label="程式碼" trailing={<span className="text-[0.9375rem] tabular-nums text-ink-muted">+{s.cost.added} −{s.cost.removed}</span>} />
-            </ListGroup>
-          ) : null}
+        <div className="grid gap-7 pb-2">
+          <Section
+            action={<button className="rounded-md px-1.5 py-0.5 text-[0.75rem] tabular-nums text-ink-muted outline-none hover:bg-surface-raised focus-visible:ring-2 focus-visible:ring-[var(--focus-ring)]" onClick={() => setSheet("window")} type="button">門檻 {currentWindow ?? "—"}</button>}
+            title="Context"
+          >
+            <ContextChart context={s.context} />
+          </Section>
+          <Section title="方案用量"><PlanRings fiveHour={plan?.fiveHour} sevenDay={plan?.sevenDay} /></Section>
+          <Section title="本次執行"><RunStats cost={s.cost} /></Section>
         </div>
       </Sheet>
 
@@ -748,7 +767,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       <ConfirmDialog
         confirmLabel="移除"
         description="只是從 imnotcc 的列表拿掉，電腦上的紀錄檔會留著。"
-        onConfirm={() => void del(sessionUrl).then(() => { window.clearTimeout(archiveTimer.current); archiveTimer.current = undefined; void removeLocalTranscript(id).catch(() => {}); clearCache(sessionUrl); navigate("/", { replace: true }); })}
+        onConfirm={() => void del(sessionUrl).then(() => { window.clearTimeout(archiveTimer.current); archiveTimer.current = undefined; void removeLocalTranscript(id).catch(() => {}); clearComposerDraft(id); clearCache(sessionUrl); navigate("/", { replace: true }); })}
         onOpenChange={(o) => setSheet(o ? "remove" : null)}
         open={sheet === "remove"}
         title="移除這個對話？"
@@ -797,7 +816,75 @@ function Draft({ className, onGrow, source }: { className?: string; onGrow: () =
 
 const BUBBLE = "max-w-[92%] justify-self-start rounded-[1.25rem] rounded-bl-md bg-surface-solid px-4 py-2.5 shadow-panel";
 
-function Entry({ bubbles, item }: { bubbles: boolean; item: Item }) {
+interface TranscriptListProps {
+  bubbles: boolean;
+  changes: Record<string, FileChange[]>;
+  draft: DraftText;
+  drafting: boolean;
+  followDraft: () => void;
+  groupTools: boolean;
+  hasEarlier: boolean;
+  hideWork: boolean;
+  loadError: string;
+  loadingEarlier: boolean;
+  onAnswer: (req: PermissionRequest, a: Answer) => void;
+  onLoadEarlier: () => void;
+  onOpenDiff: (turn: string, path: string, files: FileChange[]) => void;
+  onRetryLoad: () => void;
+  pending: PermissionRequest[];
+  running: boolean;
+  session: string;
+  tasks: BackgroundTask[];
+  transcript: React.RefObject<Transcript>;
+  version: number;
+}
+
+const TranscriptList = React.memo(function TranscriptList({
+  bubbles, changes, draft, drafting, followDraft, groupTools, hasEarlier, hideWork, loadError,
+  loadingEarlier, onAnswer, onLoadEarlier, onOpenDiff, onRetryLoad, pending, running, session, tasks, transcript, version,
+}: TranscriptListProps) {
+  const items = transcript.current.items;
+  const shownItems = React.useMemo(
+    () => (hideWork ? items.filter((it) => it.type !== "tool" && it.type !== "thinking") : items)
+      .filter((it, i, all) => !(isInterrupt(it) && isInterrupt(all.slice(0, i).findLast((p) => !isStep(p))))),
+    // `version` increments whenever `transcript.current.items` mutates in place.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, version, hideWork],
+  );
+  const rows = React.useMemo(
+    () => (groupTools ? turnRows(shownItems, running, changes) : null),
+    [groupTools, shownItems, running, changes],
+  );
+  // While a turn runs, a shimmering line stays at the bottom the whole time, so the transcript
+  // does not jump as steps start and finish; it names the tool at work when bubble mode hides it.
+  const busyTool = running ? items.findLast((it) => it.type === "tool" && !it.done) : undefined;
+  const status = !running ? null : busyTool && hideWork ? `正在使用 ${busyTool.name}` : "思考中";
+  const lastRow = rows?.at(-1);
+  // The background-work label sits beside the last reply's copy button when there is one.
+  const tasksBesideCopy = !running && lastRow?.kind === "copy";
+  const tasksChip = <BackgroundTasks session={session} tasks={tasks} />;
+
+  return (
+    <main className="mx-auto grid max-w-3xl grid-cols-[minmax(0,1fr)] gap-3.5 px-[var(--gutter)] pb-[calc(var(--chat-composer-height,0px)+1rem)] pt-[calc(var(--chat-header-height,0px)+1rem)] md:px-8">
+      {loadError ? <ErrorState message={loadError} onRetry={onRetryLoad} retryLabel="重試" title="打不開這個對話" /> : null}
+      {hasEarlier ? (
+        <Button className="justify-self-center" onClick={onLoadEarlier} size="sm" status={loadingEarlier ? "loading" : "idle"} variant="ghost">載入更早的訊息</Button>
+      ) : null}
+      {!rows ? shownItems.map((item) => <Entry bubbles={bubbles} item={item} key={item.key} />)
+        : rows.map((row) => row.kind === "work"
+          ? <TurnWork end={row.end} items={row.items} key={row.key} live={row.live} start={row.start} />
+          : row.kind === "copy" ? <CopyTurn extra={row === lastRow && tasksBesideCopy ? tasksChip : null} key={row.key} text={row.text} />
+          : row.kind === "files" ? <FilesCard files={row.files} key={row.key} onOpen={(path) => onOpenDiff(row.turn, path, row.files)} />
+          : <Entry bubbles={bubbles} item={row.item} key={row.item.key} />)}
+      {drafting ? <Draft className={cn("content-in", bubbles ? BUBBLE : "draft-stream")} onGrow={followDraft} source={draft} /> : null}
+      {pending.map((p) => <PermissionCard key={p.id} onAnswer={(a) => onAnswer(p, a)} req={p} />)}
+      {tasks.length > 0 && !tasksBesideCopy ? <div className="-mt-2 justify-self-start">{tasksChip}</div> : null}
+      {status ? <p className="message-in justify-self-start text-[0.9375rem]" key={status} role="status"><span className="shimmer">{status}</span></p> : null}
+    </main>
+  );
+});
+
+const Entry = React.memo(function Entry({ bubbles, item }: { bubbles: boolean; item: Item }) {
   switch (item.type) {
     case "user":
       if (item.image) {
@@ -828,7 +915,7 @@ function Entry({ bubbles, item }: { bubbles: boolean; item: Item }) {
         </p>
       );
   }
-}
+});
 
 const isInterrupt = (it?: Item) => !!it && it.type === "note" && it.text === "已中斷";
 

@@ -1,28 +1,42 @@
 import * as React from "react";
 import { toast } from "sonner";
-import { ArrowClockwise, MagnifyingGlass, Plus, PuzzlePiece, Storefront } from "@phosphor-icons/react/ssr";
+import { ArrowClockwise, LinuxLogo, MagnifyingGlass, Plus, PuzzlePiece, Storefront, WindowsLogo } from "@phosphor-icons/react/ssr";
 import { get, post } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useCached } from "@/lib/cache";
+import { clearCache, useCached } from "@/lib/cache";
+import { prefs } from "@/lib/prefs";
+import type { ClaudeEnv } from "@/lib/resources";
+import { createStore, useStore } from "@/lib/store-core";
 import { Button } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Field, Input } from "@/ui/field";
 import { ListGroup, ListRow, rowClass } from "@/ui/list";
 import { EmptyState, ErrorState, LoadingList, PageHeader } from "@/ui/page";
+import { Segmented, type SegmentedOption } from "@/ui/segmented";
 import { Sheet } from "@/ui/sheet";
 import { Switch } from "@/ui/switch";
 
 interface Installed { id: string; version?: string; scope?: string; enabled: boolean }
 interface Market { name: string; source?: string }
-interface Overview { installed: Installed[]; marketplaces: Market[] }
+interface Overview { envs?: ClaudeEnv[]; env?: ClaudeEnv; installed: Installed[]; marketplaces: Market[] }
+
+const ENV_OPTIONS: SegmentedOption<ClaudeEnv>[] = [
+  { value: "win", label: "Windows", icon: <WindowsLogo /> },
+  { value: "wsl", label: "WSL", icon: <LinuxLogo /> },
+];
+const pluginEnv = createStore<{ env: ClaudeEnv; envs: ClaudeEnv[] }>({
+  env: prefs.get().sessionEnvironment,
+  envs: [prefs.get().sessionEnvironment],
+});
 
 const pluginName = (id: string) => id.split("@")[0];
 const marketName = (id: string) => id.split("@")[1] ?? "";
 
 /** Runs one `claude plugin` action; what the CLI printed comes back as a toast. */
-async function runAction(action: string, name: string, scope?: string) {
+async function runAction(action: string, name: string, env: ClaudeEnv, scope?: string) {
   try {
-    const r = await post(`/api/plugins/${action}`, { name, scope });
+    const r = await post(`/api/plugins/${action}`, { name, scope, env });
+    clearCache(`plugins:${env}`);
     toast.success(r.output?.trim() || "完成");
     return true;
   } catch (e) {
@@ -31,25 +45,34 @@ async function runAction(action: string, name: string, scope?: string) {
   }
 }
 
-function usePlugins() {
-  const { data, error, reload: load } = useCached<Overview>("plugins", async () => {
-    const r = await get("/api/plugins");
-    return { installed: r.installed, marketplaces: r.marketplaces };
+function usePlugins(env: ClaudeEnv) {
+  const { data, error, reload: load } = useCached<Overview>(`plugins:${env}`, async () => {
+    const r = await get<Overview>(`/api/plugins?env=${env}`);
+    if (r.envs?.length) pluginEnv.set({ envs: r.envs, ...(r.env ? { env: r.env } : {}) });
+    return { envs: r.envs, env: r.env, installed: r.installed, marketplaces: r.marketplaces };
   });
   return { data, error, load };
+}
+
+function EnvSwitch() {
+  const { env, envs } = useStore(pluginEnv);
+  if (envs.length < 2) return null;
+  return <Segmented label="執行環境" onChange={(next) => pluginEnv.set({ env: next })} options={ENV_OPTIONS} value={env} />;
 }
 
 // ---- Plugin ----
 
 export function PluginsPage() {
-  const { data, error, load } = usePlugins();
+  const { env } = useStore(pluginEnv);
+  const { data, error, load } = usePlugins(env);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<Installed | null>(null);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
+  React.useEffect(() => { setSelected(null); setConfirmRemove(false); }, [env]);
 
   async function run(action: string, p: Installed) {
     setBusy(`${action}:${p.id}`);
-    const ok = await runAction(action, p.id, p.scope);
+    const ok = await runAction(action, p.id, env, p.scope);
     await load();
     setBusy(null);
     return ok;
@@ -58,6 +81,7 @@ export function PluginsPage() {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader actions={<Button aria-label="重新整理" onClick={() => void load()} size="icon"><ArrowClockwise weight="bold" /></Button>} title="擴充元件" />
+      <EnvSwitch />
       {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到擴充元件" />
         : !data ? <LoadingList label="載入中" rows={3} />
         : (
@@ -140,16 +164,18 @@ export function PluginsPage() {
 interface Available { id: string; name: string; description?: string; installed?: boolean }
 
 export function PluginBrowsePage() {
+  const { env } = useStore(pluginEnv);
+  usePlugins(env);
   const [q, setQ] = React.useState("");
   const [busy, setBusy] = React.useState<string | null>(null);
   const query = q.trim();
 
-  const url = `/api/plugins/available?q=${encodeURIComponent(query)}`;
+  const url = `/api/plugins/available?env=${env}&q=${encodeURIComponent(query)}`;
   const { data: results, error, reload: search } = useCached(url, () => get<{ plugins: Available[]; total: number }>(url), !!query, 300);
 
   async function install(p: Available) {
     setBusy(p.id);
-    await runAction("install", p.id);
+    await runAction("install", p.id, env);
     if (query) await search();
     setBusy(null);
   }
@@ -157,6 +183,7 @@ export function PluginBrowsePage() {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageHeader back={{ href: "/plugins", label: "擴充元件" }} title="瀏覽並安裝" />
+      <EnvSwitch />
       <label className="glass-control flex h-12 items-center gap-3 rounded-full border px-4 focus-within:border-[var(--focus-ring)]">
         <MagnifyingGlass aria-hidden className="size-5 shrink-0 text-ink-muted" />
         <input aria-label="搜尋擴充元件" autoFocus className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-faint" onChange={(e) => setQ(e.target.value)} placeholder="搜尋 marketplace 裡的擴充元件" type="search" value={q} />
@@ -190,15 +217,17 @@ export function PluginBrowsePage() {
 // ---- Plugin › Marketplace 來源 ----
 
 export function PluginSourcesPage() {
-  const { data, error, load } = usePlugins();
+  const { env } = useStore(pluginEnv);
+  const { data, error, load } = usePlugins(env);
   const [addOpen, setAddOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<Market | null>(null);
   const [confirmRemove, setConfirmRemove] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
+  React.useEffect(() => { setSelected(null); setConfirmRemove(false); }, [env]);
 
   async function run(action: string, name: string) {
     setBusy(action);
-    const ok = await runAction(action, name);
+    const ok = await runAction(action, name, env);
     await load();
     setBusy(null);
     return ok;
@@ -211,6 +240,7 @@ export function PluginSourcesPage() {
         back={{ href: "/plugins", label: "擴充元件" }}
         title="Marketplace 來源"
       />
+      <EnvSwitch />
       {error ? <ErrorState message={error} onRetry={() => void load()} retryLabel="重試" title="讀不到 marketplace" />
         : !data ? <LoadingList label="載入中" rows={2} />
         : (

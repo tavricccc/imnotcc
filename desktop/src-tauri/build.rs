@@ -3,6 +3,7 @@ fn main() {
         tauri_build::Attributes::new().app_manifest(
             tauri_build::AppManifest::new().commands(&[
                 "get_state",
+                "is_local_host",
                 "use_remote",
                 "use_local",
                 "forget_remote",

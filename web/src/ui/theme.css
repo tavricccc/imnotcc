@@ -36,6 +36,8 @@
   --canvas-gradient: none;
   --canvas-foot: #f4f3f1;
   --surface: #ffffff;
+  --viz-1: #2a78d6; --viz-2: #eb6834; --viz-3: #1baf7a; --viz-4: #eda100;
+  --viz-5: #e87ba4; --viz-6: #008300; --viz-7: #6250d6; --viz-8: #e34948;
   --surface-raised: rgb(20 18 16 / 5%);
   --surface-pressed: rgb(20 18 16 / 9%);
   --surface-solid: #ffffff;
@@ -71,6 +73,8 @@
   --canvas: #0d0c0b;
   --canvas-foot: #0d0c0b;
   --surface: #181615;
+  --viz-1: #3987e5; --viz-2: #d95926; --viz-3: #199e70; --viz-4: #c98500;
+  --viz-5: #d55181; --viz-6: #0ca30c; --viz-7: #9085e9; --viz-8: #e66767;
   --surface-raised: rgb(255 255 255 / 6%);
   --surface-pressed: rgb(255 255 255 / 10%);
   --surface-solid: #1c1a18;

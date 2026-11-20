@@ -27,7 +27,7 @@ export function LoginPage() {
   return (
     <main className="grid min-h-svh place-items-center px-[var(--gutter)] py-10">
       <form className="content-in grid w-full max-w-sm justify-items-center gap-6" onSubmit={submit}>
-        <img alt="" className="size-20 rounded-[22.37%] shadow-float" src="/icon.svg" />
+        <span className="drop-shadow-[0_8px_20px_rgb(0_0_0/0.14)]"><img alt="" className="app-icon size-20" src="/icon.svg" /></span>
         <div className="grid gap-1 text-center">
           <h1 className="text-2xl font-bold tracking-tight">imnotcc</h1>
           <p className="text-[0.9375rem] text-ink-muted">Claude Code 的圖形介面，電腦和手機都接得上</p>

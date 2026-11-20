@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { cn } from "@/lib/utils";
+import { focusPanel } from "./open-focus";
 
 /**
  * A centred question or explanation that asks for attention, such as an
@@ -39,6 +40,7 @@ export function Dialog({
             className,
           )}
           onEscapeKeyDown={block}
+          onOpenAutoFocus={focusPanel}
           onInteractOutside={block}
         >
           <div className="grid gap-2">

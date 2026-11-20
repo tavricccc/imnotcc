@@ -1,6 +1,8 @@
 // Draws the app icon: a pixel Clawd with a chat bubble, on cream. Writes the SVG and the PNGs
-// (iOS needs PNG) from the same shapes.
+// (iOS needs PNG) from the same shapes. iOS rounds the home-screen icon itself, so those stay
+// square; the desktop app's icon is cut to the same continuous-corner shape here.
 //   node scripts/icons.mjs
+//   cd desktop && npx tauri icon src-tauri/icons/source.png   (then keep only the files already in icons/)
 import fs from 'node:fs';
 import zlib from 'node:zlib';
 
@@ -67,19 +69,34 @@ function colourAt(x, y) {
   return rgb(c);
 }
 
-function png(size) {
+// iOS's icon outline: a superellipse |x|^5 + |y|^5 <= 1, inset a little like other desktop icons.
+const SQUIRCLE_INSET = 0.04;
+function inSquircle(x, y) {
+  const r = 256 * (1 - 2 * SQUIRCLE_INSET);
+  return Math.abs((x - 256) / r) ** 5 + Math.abs((y - 256) / r) ** 5 <= 1;
+}
+
+function png(size, squircle = false) {
   const k = 512 / size;
   const N = 4; // supersampling
-  const stride = size * 3 + 1;
+  const ch = squircle ? 4 : 3;
+  const stride = size * ch + 1;
   const raw = Buffer.alloc(size * stride);
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const sum = [0, 0, 0];
+      let hits = 0;
       for (let sy = 0; sy < N; sy++) for (let sx = 0; sx < N; sx++) {
-        const c = colourAt((x + (sx + 0.5) / N) * k, (y + (sy + 0.5) / N) * k);
+        const px = (x + (sx + 0.5) / N) * k, py = (y + (sy + 0.5) / N) * k;
+        if (squircle && !inSquircle(px, py)) continue;
+        // The artwork shrinks into the inset outline.
+        const c = squircle ? colourAt(256 + (px - 256) / (1 - 2 * SQUIRCLE_INSET), 256 + (py - 256) / (1 - 2 * SQUIRCLE_INSET)) : colourAt(px, py);
         for (let i = 0; i < 3; i++) sum[i] += c[i];
+        hits++;
       }
-      for (let i = 0; i < 3; i++) raw[y * stride + 1 + x * 3 + i] = Math.round(sum[i] / (N * N));
+      const at = y * stride + 1 + x * ch;
+      for (let i = 0; i < 3; i++) raw[at + i] = hits ? Math.round(sum[i] / hits) : 0;
+      if (squircle) raw[at + 3] = Math.round((hits / (N * N)) * 255);
     }
   }
   const chunk = (type, data) => {
@@ -90,7 +107,7 @@ function png(size) {
   };
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; ihdr[9] = 2;
+  ihdr[8] = 8; ihdr[9] = squircle ? 6 : 2;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
@@ -110,3 +127,5 @@ for (const [name, size] of [['apple-touch-icon.png', 180], ['icon-192.png', 192]
   fs.writeFileSync(out(name), png(size));
   console.log(name, size);
 }
+fs.writeFileSync(new URL('../desktop/src-tauri/icons/source.png', import.meta.url), png(1024, true));
+console.log('desktop source.png', 1024);

@@ -137,8 +137,17 @@ fn load_config(app: &AppHandle) -> Config {
 }
 
 pub fn save_config(app: &AppHandle, c: &Config) -> Result<(), String> {
+    let path = config_path(app);
+    let tmp = path.with_extension("json.tmp");
     let s = serde_json::to_string_pretty(c).map_err(|e| e.to_string())?;
-    fs::write(config_path(app), s).map_err(|e| format!("寫入設定失敗：{e}"))
+    fs::write(&tmp, s).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("寫入設定失敗：{e}")
+    })?;
+    fs::rename(&tmp, &path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        format!("寫入設定失敗：{e}")
+    })
 }
 
 /// This build: the version plus the exe's modified time, so reinstalling a rebuilt app with the
@@ -403,24 +412,35 @@ struct StateView {
 }
 
 #[tauri::command]
-fn get_state(app: AppHandle, window: WebviewWindow) -> Result<StateView, String> {
+fn is_local_host(app: AppHandle, window: WebviewWindow) -> Result<bool, String> {
     from_trusted_page(&app, &window)?;
-    let state = app.state::<AppState>();
-    let config = state.config.lock().unwrap().clone();
-    let autostart = app.autolaunch().is_enabled().unwrap_or(false);
-    Ok(StateView {
-        needs_update: needs_update(&app, &config),
-        needs_deps_install: local::needs_deps_install(&app),
-        config,
-        node: local::node_version(),
-        local_url: local_url(&app),
-        autostart,
-        data_dir: local::data_dir(&app).display().to_string(),
-        log_dir: local::log_dir(&app).display().to_string(),
-        has_password: local::read_password(&app).is_some(),
-        server_running: state.server.is_running(),
-        app_version: app.package_info().version.to_string(),
+    Ok(app.state::<AppState>().config.lock().unwrap().local)
+}
+
+#[tauri::command]
+async fn get_state(app: AppHandle, window: WebviewWindow) -> Result<StateView, String> {
+    from_trusted_page(&app, &window)?;
+    let app2 = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app2.state::<AppState>();
+        let config = state.config.lock().unwrap().clone();
+        let autostart = app2.autolaunch().is_enabled().unwrap_or(false);
+        Ok(StateView {
+            needs_update: needs_update(&app2, &config),
+            needs_deps_install: local::needs_deps_install(&app2),
+            config,
+            node: local::node_version(),
+            local_url: local_url(&app2),
+            autostart,
+            data_dir: local::data_dir(&app2).display().to_string(),
+            log_dir: local::log_dir(&app2).display().to_string(),
+            has_password: local::read_password(&app2).is_some(),
+            server_running: state.server.is_running(),
+            app_version: app2.package_info().version.to_string(),
+        })
     })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Ask `url` whether it is a imnotcc server. A Cloudflare Access login page counts: the real
@@ -956,6 +976,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_state,
+            is_local_host,
             use_remote,
             use_local,
             forget_remote,

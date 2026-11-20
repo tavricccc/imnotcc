@@ -2,6 +2,7 @@ import * as React from "react";
 import { AlertDialog } from "radix-ui";
 import { useI18n } from "@/i18n";
 import { Button, type ActionStatus } from "./button";
+import { focusPanel } from "./open-focus";
 
 /**
  * A question that has to be answered before something irreversible happens.
@@ -42,7 +43,7 @@ export function ConfirmDialog({
       {trigger ? <AlertDialog.Trigger asChild>{trigger}</AlertDialog.Trigger> : null}
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="scrim fixed inset-0 z-50 bg-[var(--scrim)]" />
-        <AlertDialog.Content className="dialog-surface fixed left-1/2 top-1/2 z-50 grid w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 gap-5 rounded-panel border border-line bg-surface-solid p-6 text-ink shadow-float outline-none">
+        <AlertDialog.Content onOpenAutoFocus={focusPanel} className="dialog-surface fixed left-1/2 top-1/2 z-50 grid w-[min(24rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 gap-5 rounded-panel border border-line bg-surface-solid p-6 text-ink shadow-float outline-none">
           <div className="grid gap-2">
             <AlertDialog.Title className="text-lg font-semibold">{title}</AlertDialog.Title>
             {description ? <AlertDialog.Description className="text-[0.9375rem] leading-relaxed text-ink-muted">{description}</AlertDialog.Description> : null}

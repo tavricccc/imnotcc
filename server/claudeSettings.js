@@ -14,15 +14,10 @@ const MODEL = /^[\w.\-[\]]+$/;
 
 const envs = () => (wsl.available() ? ['win', 'wsl'] : ['win']);
 const mdFile = (env) => path.join(path.dirname(settingsFile(env)), 'CLAUDE.md');
-const EFFORT = /^(low|medium|high|xhigh|max)$/;
 const settingsFile = (env) => (env === 'wsl' ? wsl.hostPath(`${wsl.homeDir()}/.claude/settings.json`) : WIN_SETTINGS);
 
 function readModelSettings(env) {
   try { return JSON.parse(fs.readFileSync(settingsFile(env), 'utf8')).modelSettings ?? {}; } catch { return {}; }
-}
-
-function readJson(env) {
-  try { return JSON.parse(fs.readFileSync(settingsFile(env), 'utf8')); } catch (e) { if (e.code === 'ENOENT') return {}; throw new Error('settings.json 讀不了或格式不對，沒有改動。'); }
 }
 
 function writeAtomic(file, text) {
@@ -36,8 +31,12 @@ async function runCommand(env, model, text) {
   const cwd = env === 'wsl' ? wsl.homeDir() : os.homedir();
   let reply = '';
   const q = query({ prompt: text, options: { model, cwd, persistSession: false, maxTurns: 1, ...wsl.spawnOptions(cwd) } });
-  for await (const m of q) if (m.type === 'result') reply = m.result ?? m.subtype;
-  return reply;
+  try {
+    for await (const m of q) if (m.type === 'result') reply = m.result ?? m.subtype;
+    return reply;
+  } finally {
+    q.close();
+  }
 }
 
 export function claudeSettingsRoutes(app, wrap) {

@@ -47,6 +47,8 @@ const emit = (id, event) => {
 const DELTA_MS = 40;
 /** Sends `event` to every open page. */
 export const broadcast = (event) => emit(null, event);
+/** Sends `event` to the pages that have this session open. */
+export const emitTo = (id, event) => emit(id, event);
 
 export function runnerFor(id) {
   let r = runners.get(id);
@@ -162,6 +164,7 @@ class Runner {
   async start() {
     this.effortStale = false;
     const meta = this.meta;
+    if (!meta) throw new Error('找不到這個對話。');
     const settings = store.get().settings;
     const exists = !!(await wsl.readFor(meta.cwd, () => getSessionInfo(this.id, { dir: meta.cwd })).catch(() => null));
     this.closing = false;
@@ -212,6 +215,7 @@ class Runner {
       this.setStatus('idle');
       this.returnHeld();
       emit(this.id, { kind: 'closed' });
+      if (!this.meta && runners.get(this.id) === this) runners.delete(this.id);
     }
   }
 
@@ -267,7 +271,8 @@ class Runner {
     const turn = this.turn;
     this.turn = null;
     if (!turn) return;
-    const cwd = this.meta.cwd;
+    const cwd = this.meta?.cwd;
+    if (!cwd) return;
     (async () => {
       const { before } = turn;
       if (!before) return;
@@ -332,12 +337,14 @@ class Runner {
       this.emitHeld();
       return;
     }
+    const cwd = this.meta?.cwd;
+    if (!cwd) throw new Error('找不到這個對話。');
     clearTimeout(this.idleTimer);
     // A prompt sent while a turn runs joins that turn; its changes are counted from the first.
     // The 'before' snapshot is taken while Claude Code starts, and the prompt only goes out once
     // it is done, so nothing Claude does can land in the 'before' side.
     const counts = this.status !== 'running' && !this.turn && uuid;
-    const before = counts ? changes.snapshot(this.meta.cwd) : null;
+    const before = counts ? changes.snapshot(cwd) : null;
     try {
       await this.restarting?.catch(() => {});
       await this.applyEffort();
@@ -366,14 +373,18 @@ class Runner {
   }
 
   async setMode(mode) {
-    this.meta.permissionMode = mode;
+    const meta = this.meta;
+    if (!meta) return;
+    meta.permissionMode = mode;
     store.save();
     if (this.q) await this.q.setPermissionMode(mode);
     emit(this.id, { kind: 'mode', permissionMode: mode });
   }
 
   async setModel(model) {
-    this.meta.model = model || null;
+    const meta = this.meta;
+    if (!meta) return;
+    meta.model = model || null;
     store.save();
     if (this.q) await this.q.setModel(model || undefined);
     emit(this.id, { kind: 'model', model: model || null });
@@ -382,7 +393,9 @@ class Runner {
   // Effort is fixed when the process starts. It is saved at once; a process already running keeps
   // its old effort until the next message, which restarts it (resuming the same session) first.
   async setEffort(effort) {
-    this.meta.effort = effort || null;
+    const meta = this.meta;
+    if (!meta) return;
+    meta.effort = effort || null;
     store.save();
     if (this.q) this.effortStale = true;
     emit(this.id, { kind: 'effort', effort: effort || null });

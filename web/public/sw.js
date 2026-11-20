@@ -22,26 +22,35 @@ self.addEventListener('fetch', (e) => {
   }
 });
 
+const routeOf = (href) => {
+  const u = new URL(href);
+  const hash = u.hash.replace(/^#/, '');
+  return hash.startsWith('/') ? hash : (u.pathname || '/');
+};
+const targetRoute = (raw) => (typeof raw === 'string' && raw.startsWith('/') ? raw : '/');
+
 // Web Push: skipped while the session it is about is open in front of the user.
 self.addEventListener('push', (e) => {
   let data = {};
   try { data = e.data ? e.data.json() : {}; } catch { data = { body: e.data?.text() }; }
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
-    const watching = data.url && wins.some((w) => w.focused && w.visibilityState === 'visible' && new URL(w.url).pathname === data.url);
+    const target = data.session ? targetRoute(data.url) : null;
+    const watching = target && wins.some((w) => w.focused && w.visibilityState === 'visible' && routeOf(w.url) === target);
     if (watching) return;
     return self.registration.showNotification(data.title || 'imnotcc', {
-      body: data.body || '', tag: data.tag, renotify: !!data.tag, icon: '/icon-192.png', badge: '/icon-192.png', data: { url: data.url || '/' },
+      body: data.body || '', tag: data.tag, renotify: !!data.tag, icon: '/icon-192.png', badge: '/icon-192.png', data: { url: targetRoute(data.url) },
     });
   }));
 });
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
-  const url = new URL(e.notification.data?.url || '/', location.origin).href;
+  const route = targetRoute(e.notification.data?.url);
+  const openHref = new URL(route === '/' ? '/' : `/#${route}`, location.origin).href;
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
     const win = wins.find((w) => new URL(w.url).origin === location.origin);
     // An open app moves to the session itself, without reloading.
-    if (win) { win.postMessage({ type: 'open', url: new URL(url).pathname }); return win.focus(); }
-    return self.clients.openWindow(url);
+    if (win) { win.postMessage({ type: 'open', url: route }); return win.focus(); }
+    return self.clients.openWindow(openHref);
   }));
 });

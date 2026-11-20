@@ -1,5 +1,6 @@
 // Files going in and out: an upload lands in the session folder's .imnotcc/uploads/ for Claude to
 // read, and a folder comes back as a zip. Keys and credentials (sensitive.js) stay out of zips.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
@@ -52,8 +53,24 @@ export function transferRoutes(app, { requireSession, wrap }) {
     if (isSensitive(name)) return res.status(400).json({ error: '這種檔案可能含有金鑰或密碼，不能上傳。' });
     let dir;
     try { dir = uploadDir(meta.cwd); } catch (e) { return res.status(500).json({ error: `建立上傳資料夾失敗：${e.code ?? e.message}` }); }
-    const file = `${stamp()}-${name}`;
-    const host = path.join(dir.host, file);
+    const ts = stamp();
+    let file;
+    let host;
+    let fd;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = attempt === 0 ? `${ts}-${name}` : `${ts}-${crypto.randomBytes(3).toString('hex')}-${name}`;
+      const candidateHost = path.join(dir.host, candidate);
+      try {
+        fd = fs.openSync(candidateHost, 'wx');
+        file = candidate;
+        host = candidateHost;
+        break;
+      } catch (e) {
+        if (e.code !== 'EEXIST') return res.status(500).json({ error: `儲存失敗：${e.code ?? e.message}` });
+      }
+    }
+    if (fd === undefined) return res.status(409).json({ error: '同名檔案剛上傳過，請再試一次。' });
+
     let received = 0;
     const counter = async function* (src) {
       for await (const chunk of src) {
@@ -63,11 +80,11 @@ export function transferRoutes(app, { requireSession, wrap }) {
       }
     };
     try {
-      await pipeline(req, counter, fs.createWriteStream(host, { flags: 'wx' }));
+      await pipeline(req, counter, fs.createWriteStream(host, { fd }));
     } catch (e) {
+      try { fs.closeSync(fd); } catch {}
       fs.rmSync(host, { force: true });
       if (e.code === 'TOO_LARGE') return res.status(413).json({ error: '檔案太大。' });
-      if (e.code === 'EEXIST') return res.status(409).json({ error: '同名檔案剛上傳過，請再試一次。' });
       if (!res.headersSent && !req.destroyed) return res.status(500).json({ error: `儲存失敗：${e.code ?? e.message}` });
       return;
     }

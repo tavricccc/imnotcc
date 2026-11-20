@@ -205,6 +205,15 @@ export const ARCHIVE_WARN_BYTES = 30 * 1024 * 1024;
 
 export const removeLocalTranscript = (id: string) => removeLocalTranscripts([id]);
 
+export function clearComposerDraft(id: string) {
+  try {
+    localStorage.removeItem(`imnotcc:composer:${id}`);
+    localStorage.removeItem(`imnotcc:composer:images:${id}`);
+    localStorage.removeItem(`ccr:composer:${id}`);
+    localStorage.removeItem(`imnotcc:composer:at:${id}`);
+  } catch { /* storage blocked */ }
+}
+
 export function saveLocalTranscript(id: string, items: Item[]) {
   if (!items.length) return Promise.resolve();
   const snapshot = structuredClone(items);

@@ -94,12 +94,10 @@ export function EmptyState({ action, description, title }: { action?: React.Reac
 }
 
 /** A load that failed, with the reason and a way to try again. */
-export function ErrorState({ message, onRetry, retryLabel, title }: {
+export function ErrorState({ message, onRetry, retryLabel = "重試", title }: {
   message: React.ReactNode;
-  onRetry?: () => void;
-  retryLabel: string;
   title: React.ReactNode;
-}) {
+} & ({ onRetry: () => void; retryLabel?: string } | { onRetry?: undefined; retryLabel?: never })) {
   return (
     <StateMessage
       action={onRetry ? <Button onClick={onRetry}><ArrowClockwise weight="bold" />{retryLabel}</Button> : null}

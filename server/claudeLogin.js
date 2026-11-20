@@ -3,9 +3,6 @@
 // through a pipe: the page shows the link, the user signs in anywhere, and pastes the code back.
 // Windows sessions and WSL sessions each have their own login ("host" and "wsl").
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
-import { createRequire } from 'node:module';
 import * as store from './state.js';
 import * as runners from './runner.js';
 import * as wsl from './wsl.js';
@@ -15,27 +12,12 @@ const STATUS_TTL = 60 * 1000;
 // Assistant errors that mean the login itself is gone, not a passing API problem.
 const AUTH_ERRORS = new Set(['authentication_failed', 'oauth_org_not_allowed']);
 
-// The CLI the SDK runs, so this is the same binary and the same login as the sessions use.
-let exe;
-function claudeExe() {
-  if (exe !== undefined) return exe;
-  const require = createRequire(import.meta.url);
-  const name = process.platform === 'win32' ? 'claude.exe' : 'claude';
-  for (const suffix of ['', '-musl']) {
-    try {
-      const dir = path.dirname(require.resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}${suffix}/package.json`));
-      if (fs.existsSync(path.join(dir, name))) return (exe = path.join(dir, name));
-    } catch { /* not installed for this platform */ }
-  }
-  return (exe = 'claude');
-}
-
 const targets = () => (wsl.available() ? ['host', 'wsl'] : ['host']);
 
 function run(target, args) {
   const opts = { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true };
   if (target === 'wsl') return spawn('wsl.exe', wsl.cliArgs(args), { ...opts, env: wsl.cliEnv() });
-  return spawn(claudeExe(), args, { ...opts, env: wsl.spawnOptions(process.cwd()).env });
+  return spawn(wsl.claudeExe(), args, { ...opts, env: wsl.spawnOptions(process.cwd()).env });
 }
 
 // ---- Status ----

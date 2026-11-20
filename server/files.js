@@ -180,7 +180,10 @@ export function fileRoutes(app, { requireSession, wrap }) {
     let real;
     try { real = fs.realpathSync(path.resolve(grant.dir, rel)); } catch { return res.status(404).type('text/plain').send('找不到這個檔案。'); }
     // Only inside the page's folder, symlinks included.
-    if (real !== grant.dir && !real.startsWith(grant.dir + path.sep)) return res.status(403).type('text/plain').send('不能開這個資料夾以外的檔案。');
+    const relFromGrant = path.relative(grant.dir, real);
+    if (relFromGrant === '..' || relFromGrant.startsWith(`..${path.sep}`) || path.isAbsolute(relFromGrant)) {
+      return res.status(403).type('text/plain').send('不能開這個資料夾以外的檔案。');
+    }
     if (isSensitive(real)) return res.status(403).type('text/plain').send(BLOCKED);
     if (!fs.statSync(real).isFile()) return res.status(404).type('text/plain').send('找不到這個檔案。');
     res.sendFile(real, { dotfiles: 'allow', headers: PREVIEW_HEADERS });

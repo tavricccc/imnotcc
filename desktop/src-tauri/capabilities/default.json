@@ -24,6 +24,7 @@
     "core:window:allow-close",
     "core:window:allow-is-maximized",
     "allow-get-state",
+    "allow-is-local-host",
     "allow-use-remote",
     "allow-use-local",
     "allow-forget-remote",

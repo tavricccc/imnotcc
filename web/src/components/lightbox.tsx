@@ -9,6 +9,16 @@ const shown = createStore<{ src: string | null }>({ src: null });
 /** Shows an image over everything, as large as the screen allows; pinch, drag and double-tap zoom it. */
 export const openImage = (src: string) => shown.set({ src });
 
+/** The <img> fills the screen and letterboxes the picture inside it; only the picture counts as "on the image". */
+function onPicture(img: HTMLImageElement, x: number, y: number) {
+  const r = img.getBoundingClientRect();
+  if (!img.naturalWidth || !img.naturalHeight) return true;
+  const k = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
+  const w = img.naturalWidth * k, h = img.naturalHeight * k;
+  const left = r.left + (r.width - w) / 2, top = r.top + (r.height - h) / 2;
+  return x >= left && x <= left + w && y >= top && y <= top + h;
+}
+
 interface View { scale: number; x: number; y: number }
 const FIT: View = { scale: 1, x: 0, y: 0 };
 const MAX_SCALE = 6;
@@ -81,7 +91,7 @@ function useZoom(src: string | null, onTapOutside: () => void) {
         return;
       }
       lastTap.current = now;
-      const onImage = (e.target as HTMLElement).tagName === "IMG";
+      const onImage = e.target instanceof HTMLImageElement && onPicture(e.target, e.clientX, e.clientY);
       if (!onImage && view.scale <= 1) window.setTimeout(() => { if (lastTap.current === now) onTapOutside(); }, 300);
     },
     onPointerCancel: (e: React.PointerEvent) => { pointers.current.delete(e.pointerId); setView((v) => clamp(v)); },

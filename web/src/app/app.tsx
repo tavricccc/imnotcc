@@ -4,7 +4,7 @@ import { ARCHIVE_WARN_BYTES, localArchiveStats, slimLocalTranscripts } from "@/l
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { navigate, usePath } from "@/lib/app-navigation";
 import { prefs } from "@/lib/prefs";
-import { start } from "@/lib/socket";
+import { start, stop } from "@/lib/socket";
 import { startShared } from "@/lib/store";
 import { startClaudeAuth } from "@/lib/claude-auth";
 import { ClaudeLoginWatcher } from "@/components/claude-login";
@@ -89,6 +89,7 @@ export function App() {
   }, []);
   React.useEffect(() => {
     if (authed) { start(); startShared(); startClaudeAuth(); }
+    else stop();
   }, [authed]);
   // A new screen starts at its top; a step back to a list does too, which is what a phone does.
   React.useLayoutEffect(() => { window.scrollTo(0, 0); }, [path]);

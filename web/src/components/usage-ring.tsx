@@ -1,4 +1,3 @@
-import * as React from "react";
 import { tone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -35,25 +34,5 @@ export function UsageRing({ className, label, onClick, pct }: {
         </g>
       </svg>
     </button>
-  );
-}
-
-/** One measured window: its name, its figure, a bar and a line under it. */
-export function Meter({ label, note, pct, value }: { label: string; note?: React.ReactNode; pct: number | null; value: React.ReactNode }) {
-  const t = pct == null ? "ok" : tone(pct);
-  return (
-    <div className="grid gap-2">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[0.9375rem]">{label}</span>
-        <span className="text-[0.9375rem] tabular-nums text-ink-muted">{value}</span>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-surface-pressed">
-        <div
-          className={cn("bar-in h-full rounded-full transition-[width] duration-[var(--motion-reveal)] ease-[var(--ease-arrive)]", t === "danger" ? "bg-danger" : t === "caution" ? "bg-caution" : "bg-contrast")}
-          style={{ width: `${clamp(pct)}%` }}
-        />
-      </div>
-      {note ? <p className="text-[0.8125rem] text-ink-faint">{note}</p> : null}
-    </div>
   );
 }

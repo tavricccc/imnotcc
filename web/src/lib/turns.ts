@@ -44,4 +44,4 @@ export function turnRows(items: Item[], running: boolean, changes: Record<string
 }
 
 export const pathOf = (tool: Item): string => tool.input?.file_path ?? tool.input?.notebook_path ?? "";
-export const baseName = (path: string) => path.split(/[\/]/).pop() || path;
+export { baseName } from "./format";
