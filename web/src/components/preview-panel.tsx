@@ -13,6 +13,7 @@ import { FileIcon } from "./file-icon";
 import { FileBody, OpenPage, OpenRaw, useFile } from "./preview-views";
 import { DiffBody } from "./diff-view";
 import { TaskList } from "./background-tasks";
+import { useEdgeResize } from "./resize-edge";
 import { BackToFiles, FilesBody, FilesTitle } from "./file-browser";
 
 /** Wide enough for the panel beside the chat rather than over it. */
@@ -57,14 +58,13 @@ type FileState = ReturnType<typeof useFile>;
 
 function SidePanel({ file, source, target, toggleSource }: { file: FileState; source: boolean; target: PreviewTarget; toggleSource: () => void }) {
   const width = useStore(prefs).previewWidth;
-  const drag = React.useRef<{ id: number; x: number; start: number } | null>(null);
-  const [dragging, setDragging] = React.useState<number | null>(null);
-  const shown = clampPreviewWidth(dragging ?? width);
+  const resize = useEdgeResize(width, clampPreviewWidth, (w) => prefs.set({ previewWidth: w }));
+  const { dragging, shown } = resize;
   React.useEffect(() => {
     document.documentElement.style.setProperty("--preview-width", `${shown}px`);
   }, [shown]);
   React.useEffect(() => {
-    if (dragging === null) document.documentElement.style.removeProperty("--preview-motion");
+    if (!dragging) document.documentElement.style.removeProperty("--preview-motion");
     else document.documentElement.style.setProperty("--preview-motion", "0ms");
   }, [dragging]);
   React.useEffect(() => () => {
@@ -76,35 +76,10 @@ function SidePanel({ file, source, target, toggleSource }: { file: FileState; so
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
-  const finish = () => {
-    if (!drag.current) return;
-    drag.current = null;
-    if (dragging !== null) prefs.set({ previewWidth: clampPreviewWidth(dragging) });
-    setDragging(null);
-  };
   return (
-    <aside aria-label="預覽" className="preview-in absolute inset-y-0 right-0 z-40 flex p-3 pl-0" style={{ width: shown }}>
-      <div aria-label="調整預覽寬度" aria-orientation="vertical" aria-valuenow={shown}
-        className="w-3 shrink-0 touch-none cursor-col-resize rounded-full outline-none hover:bg-accent-soft focus-visible:bg-accent-soft active:bg-accent-soft"
-        onKeyDown={(e) => {
-          const step = { ArrowLeft: 24, ArrowRight: -24 }[e.key];
-          if (step) prefs.set({ previewWidth: clampPreviewWidth(shown + step) });
-        }}
-        onLostPointerCapture={finish}
-        onPointerCancel={finish}
-        onPointerDown={(e) => {
-          if (!e.isPrimary || e.button !== 0) return;
-          drag.current = { id: e.pointerId, x: e.clientX, start: shown };
-          e.currentTarget.setPointerCapture(e.pointerId);
-          setDragging(shown);
-        }}
-        onPointerMove={(e) => {
-          const d = drag.current;
-          if (d?.id === e.pointerId) setDragging(clampPreviewWidth(d.start + d.x - e.clientX));
-        }}
-        onPointerUp={finish}
-        role="separator" tabIndex={0} />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip rounded-panel border border-line bg-surface-solid shadow-panel">
+    <aside aria-label="預覽" className="preview-in absolute inset-y-0 right-0 z-40 flex" style={{ width: shown }}>
+      {resize.handle}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip bg-surface-solid">
         <header className="flex shrink-0 items-start gap-2 border-b border-line px-4 py-3">
           <div className="min-w-0 flex-1 pt-1"><Title file={file} source={source} target={target} toggleSource={toggleSource} /></div>
           <Button aria-label="關閉預覽" onClick={closePreview} size="icon-sm" variant="ghost"><X weight="bold" /></Button>

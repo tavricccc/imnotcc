@@ -20,7 +20,10 @@ let started = false;
 export function startShared() {
   if (started) return;
   started = true;
-  get("/api/usage").then((r) => shared.set({ plan: r.plan })).catch(() => {});
+  // The saved reading shows at once; with none, or every 90 s while visible, a fresh one is read.
+  const refresh = () => get("/api/usage?refresh=1").then((r) => shared.set({ plan: r.plan })).catch(() => {});
+  get("/api/usage").then((r) => { shared.set({ plan: r.plan }); if (!r.plan) void refresh(); }).catch(() => void refresh());
+  setInterval(() => { if (document.visibilityState === "visible") void refresh(); }, 90_000);
   get("/api/controls").then((r) => shared.set({ controls: r.controls })).catch(() => {});
   onGlobal((m) => {
     if (m.kind === "plan") shared.set({ plan: m.plan });

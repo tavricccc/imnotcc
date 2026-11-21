@@ -14,7 +14,7 @@ import { onGlobal } from "@/lib/socket";
 import { useCached } from "@/lib/cache";
 import { prefs } from "@/lib/prefs";
 import { useSessions, type SessionRow } from "@/lib/resources";
-import { shared, type Plan } from "@/lib/store";
+import { shared } from "@/lib/store";
 import { useStore } from "@/lib/store-core";
 import { UsageRing } from "@/components/usage-ring";
 import { PlanRings } from "@/components/session-insights";
@@ -143,7 +143,6 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
       void load();
     } catch (e) { toast.error((e as Error).message); }
   }
-  const [usageStatus, setUsageStatus] = React.useState<"idle" | "loading" | "error">("idle");
 
   React.useEffect(() => {
     const refresh = () => { if (document.visibilityState === "visible") void load(); };
@@ -159,18 +158,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
   const five = plan?.fiveHour?.pct ?? null;
   const seven = plan?.sevenDay?.pct ?? null;
 
-  async function openUsage() {
-    setUsageOpen(true);
-    if (usageStatus === "loading") return;
-    setUsageStatus("loading");
-    try {
-      const { plan } = await get<{ plan: Plan | null }>("/api/usage?refresh=1");
-      shared.set({ plan });
-      setUsageStatus("idle");
-    } catch {
-      setUsageStatus("error");
-    }
-  }
+  function openUsage() { setUsageOpen(true); }
 
   function openDraft(cwd?: string) {
     const params = new URLSearchParams({ env });
@@ -180,7 +168,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
 
   const actions = (
     <>
-      <UsageRing label={five == null && seven == null ? "方案用量" : `方案用量：5 小時 ${five ?? "–"}%，每週 ${seven ?? "–"}%`} onClick={() => void openUsage()} pct={five == null && seven == null ? null : Math.max(five ?? 0, seven ?? 0)} />
+      <UsageRing label={five == null && seven == null ? "方案用量" : `方案用量：5 小時 ${five ?? "–"}%，每週 ${seven ?? "–"}%`} onClick={openUsage} pct={five == null && seven == null ? null : Math.max(five ?? 0, seven ?? 0)} />
       {!sidebar && onOpenSettings ? <Button aria-label="設定" onClick={onOpenSettings} size="icon"><GearSix /></Button> : null}
       {sidebar ? null : <Button aria-label="新增對話" onClick={() => openDraft()} size="icon" variant="primary"><Plus weight="bold" /></Button>}
     </>
@@ -315,7 +303,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
           </button>
           <UsageRing
             label={five == null && seven == null ? "方案用量" : `方案用量：5 小時 ${five ?? "–"}%，每週 ${seven ?? "–"}%`}
-            onClick={() => void openUsage()}
+            onClick={openUsage}
             pct={five == null && seven == null ? null : Math.max(five ?? 0, seven ?? 0)}
           />
         </footer>
@@ -346,8 +334,7 @@ export function SessionsPage({ activeId, onOpenSettings, onToggleSidebar, revisi
 
       <Sheet onOpenChange={setUsageOpen} open={usageOpen} title="方案用量">
         <div className="grid gap-5 pb-2">
-          {usageStatus === "error" && !plan ? <p className="text-sm text-danger" role="alert">無法更新用量。</p> : null}
-          {usageStatus === "idle" && five == null && seven == null ? <p className="text-sm text-ink-muted" role="status">目前沒有方案用量資料。</p> : null}
+          {five == null && seven == null ? <p className="text-sm text-ink-muted" role="status">目前沒有方案用量資料。</p> : null}
           <PlanRings fiveHour={plan?.fiveHour} sevenDay={plan?.sevenDay} />
         </div>
       </Sheet>

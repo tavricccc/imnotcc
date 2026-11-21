@@ -1,7 +1,7 @@
 // Charts for one session: what fills its context, the plan's windows, and what this run cost.
 // The same pieces sit in the phone's usage sheet and in the desktop inspector.
 import * as React from "react";
-import { tokens, tone, until } from "@/lib/format";
+import { tokens, tone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export interface ContextUsage { used: number; threshold: number | null; max: number; categories?: { name: string; tokens: number }[] }
@@ -31,7 +31,6 @@ function colours(names: string[]) {
 
 const pctText = (n: number) => (n > 0 && n < 0.1 ? "<0.1%" : `${n.toFixed(1)}%`);
 const TONE_TEXT = { ok: "text-ink", caution: "text-caution", danger: "text-danger" } as const;
-const TONE_STROKE = { ok: "stroke-contrast", caution: "stroke-caution", danger: "stroke-danger" } as const;
 
 /** A titled block; the inspector and the sheet both stack these. */
 export function Section({ action, children, className, title }: { action?: React.ReactNode; children: React.ReactNode; className?: string; title: React.ReactNode }) {
@@ -70,8 +69,9 @@ export function ContextChart({ context }: { context: ContextUsage | null }) {
   colour["其他"] = "var(--ink-faint)";
   // Auto-compact fires at the threshold; past it to the window's end is the buffer it keeps.
   const limit = threshold && threshold < max ? threshold : max;
-  const pct = limit ? (used / limit) * 100 : 0;
-  const t = tone(pct);
+  const pct = max ? (used / max) * 100 : 0;
+  // The colour warns as compaction nears, so it is measured against the threshold.
+  const t = tone(limit ? (used / limit) * 100 : 0);
   const mark = Math.min(100, (limit / max) * 100);
   const buffer = max - limit;
 
@@ -82,7 +82,7 @@ export function ContextChart({ context }: { context: ContextUsage | null }) {
           {Math.round(pct)}<span className="text-[1.125rem] font-medium text-ink-muted">%</span>
         </div>
         <div className="text-right text-[0.8125rem] leading-tight tabular-nums text-ink-muted">
-          <span className="text-ink">{tokens(used)}</span> / {tokens(limit)}
+          <span className="text-ink">{tokens(used)}</span> / {tokens(max)}
         </div>
       </div>
 
@@ -103,7 +103,7 @@ export function ContextChart({ context }: { context: ContextUsage | null }) {
         {buffer > 0 ? <div aria-hidden className="viz-hatch absolute top-0 h-2.5 rounded-r-full" style={{ left: `calc(${mark}% + 1px)`, right: 0 }} /> : null}
         <div aria-hidden className="absolute top-[-3px] h-[16px] w-[2px] -translate-x-1/2 rounded-full bg-ink" style={{ left: `${mark}%` }} />
         <div aria-hidden className={cn("absolute top-[18px] whitespace-nowrap text-[0.6875rem] tabular-nums text-ink-faint", mark > 80 ? "-translate-x-full" : "-translate-x-1/2")} style={{ left: `${mark}%` }}>
-          壓縮 {tokens(limit)}
+          {tokens(limit)} 壓縮
         </div>
       </div>
 
@@ -142,38 +142,40 @@ export function ContextChart({ context }: { context: ContextUsage | null }) {
   );
 }
 
-const R = 26;
-const C = 2 * Math.PI * R;
-function Donut({ label, window }: { label: string; window: PlanWindow | null | undefined }) {
+const TONE_FILL = { ok: "bg-contrast", caution: "bg-caution", danger: "bg-danger" } as const;
+
+/** When a window resets, as a weekday and clock time: 週六上午3:40. */
+function resetAt(iso?: string) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleString("zh-TW", { weekday: "short", hour: "numeric", minute: "2-digit" }).replace(/\s+/g, "");
+}
+
+function Meter({ label, window }: { label: string; window: PlanWindow | null | undefined }) {
   const pct = window ? Math.max(0, Math.min(100, window.pct)) : null;
   const t = pct == null ? "ok" : tone(pct);
+  const reset = resetAt(window?.resetsAt);
   return (
-    <div className="grid justify-items-center gap-2 rounded-tile bg-surface-raised px-2 py-3.5">
-      <div className="relative size-[72px]">
-        <svg aria-hidden className="size-full" viewBox="0 0 64 64">
-          <g fill="none" transform="rotate(-90 32 32)">
-            <circle className="stroke-surface-pressed" cx="32" cy="32" r={R} strokeWidth="6" />
-            {pct != null ? <circle className={cn("ring-arc", TONE_STROKE[t])} cx="32" cy="32" r={R} strokeDasharray={`${(pct / 100) * C} ${C}`} strokeLinecap="round" strokeWidth="6" /> : null}
-          </g>
-        </svg>
-        <span className={cn("absolute inset-0 grid place-items-center text-[1.0625rem] font-semibold tabular-nums", TONE_TEXT[t])}>
-          {pct == null ? "—" : `${Math.round(pct)}%`}
-        </span>
+    <div className="grid gap-2">
+      <div className="flex items-baseline gap-3 text-[0.875rem]">
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {reset ? <span className="shrink-0 text-[0.8125rem] text-ink-faint">{reset} 重設</span> : null}
+        <span className={cn("w-10 shrink-0 text-right tabular-nums", pct == null ? "text-ink-faint" : TONE_TEXT[t])}>{pct == null ? "—" : `${Math.round(pct)}%`}</span>
       </div>
-      <div className="grid justify-items-center leading-tight">
-        <span className="text-[0.875rem] font-medium">{label}</span>
-        <span className="text-[0.75rem] tabular-nums text-ink-faint">{window?.resetsAt ? until(window.resetsAt).replace("後重置", "") : " "}</span>
+      <div aria-hidden className="h-1.5 overflow-hidden rounded-full bg-surface-pressed">
+        {pct ? <div className={cn("bar-in h-full rounded-full transition-[width] duration-[var(--motion-reveal)]", TONE_FILL[t])} style={{ width: `${pct}%` }} /> : null}
       </div>
     </div>
   );
 }
 
-/** The plan's 5-hour and weekly windows, side by side. */
+/** The plan's 5-hour and weekly windows, one thin bar each. */
 export function PlanRings({ fiveHour, sevenDay }: { fiveHour?: PlanWindow | null; sevenDay?: PlanWindow | null }) {
   return (
-    <div className="grid grid-cols-2 gap-2">
-      <Donut label="5 小時" window={fiveHour} />
-      <Donut label="7 天" window={sevenDay} />
+    <div className="grid gap-4">
+      <Meter label="5 小時限制" window={fiveHour} />
+      <Meter label="每週 · 所有模型" window={sevenDay} />
     </div>
   );
 }

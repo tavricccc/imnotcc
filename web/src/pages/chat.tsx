@@ -34,7 +34,7 @@ import { isStep, turnRows, type FileChange } from "@/lib/turns";
 import { BUSY_SEND_LABEL, prefs, reduceMotion } from "@/lib/prefs";
 import { UsageRing } from "@/components/usage-ring";
 import { ContextChart, PlanRings, RunStats, Section } from "@/components/session-insights";
-import { INSPECTOR_WIDTH, SessionInspector } from "@/components/session-inspector";
+import { SessionInspector } from "@/components/session-inspector";
 import { Button } from "@/ui/button";
 import { ConfirmDialog } from "@/ui/confirm-dialog";
 import { Dialog } from "@/ui/dialog";
@@ -553,6 +553,11 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
 
   const interrupt = () => send(id, { t: "interrupt" });
   const answer = React.useCallback((req: PermissionRequest, a: Answer) => send(id, { t: "answer", id: req.id, ...a }), [id]);
+  // The newest turn that changed files; entries arrive in transcript order.
+  const lastChanges = React.useMemo(() => {
+    const hit = Object.entries(changes).reverse().find(([, f]) => f.length);
+    return hit ? { turn: hit[0], files: hit[1] } : null;
+  }, [changes]);
   const openDiff = React.useCallback((turn: string, path: string, files: FileChange[]) => openPreview({ kind: "diff", session: id, turn, path, files }), [id]);
 
   // ---- Session actions ----
@@ -596,7 +601,7 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
     <div className={cn("fixed inset-x-0 top-[var(--visual-top,0px)] flex h-[var(--visual-height,100dvh)] flex-col md:top-[var(--safe-top)] md:left-[var(--desktop-inset)] md:h-[calc(100dvh-var(--safe-top))] md:overflow-hidden md:rounded-tl-2xl md:border-t md:border-l md:border-line md:bg-surface md:[--edge-fade:var(--surface)] motion-safe:transition-[left] motion-safe:duration-[var(--sidebar-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]", slideIn && "chat-route-in")} ref={workspace}>
       <div
         className="relative flex min-h-0 flex-1 flex-col motion-safe:transition-[margin-right] motion-safe:duration-[var(--preview-motion,var(--motion-nav))] motion-safe:ease-[var(--ease-nav)]"
-        style={sidePreview ? { marginRight: "var(--preview-width, 0px)" } : inspector ? { marginRight: INSPECTOR_WIDTH } : undefined}
+        style={sidePreview ? { marginRight: "var(--preview-width, 0px)" } : inspector ? { marginRight: "var(--inspector-width, 320px)" } : undefined}
       >
       {/* Phones: a floating glass pill. Desktop: a flat bar across the pane, the title at the
           left as a menu button (folder, title, caret) and the controls at the right. */}
@@ -699,8 +704,8 @@ export function ChatPage({ firstPrompt, id, onRename, slideIn }: { firstPrompt?:
       <PreviewPanel />
       {inspector ? (
         <SessionInspector
-          context={s.context} cost={s.cost} cwd={meta?.cwd}
-          onClose={() => prefs.set({ inspector: false })} onCompact={() => command("/compact")} onFiles={() => openPreview({ kind: "files", session: id, path: meta?.cwd })} onRemove={() => setSheet("remove")} onCopyResume={() => void copyResume()}
+          changes={lastChanges} context={s.context} cost={s.cost} cwd={meta?.cwd}
+          onClose={() => prefs.set({ inspector: false })} onOpenDiff={openDiff} onCompact={() => command("/compact")} onFiles={() => openPreview({ kind: "files", session: id, path: meta?.cwd })} onRemove={() => setSheet("remove")} onCopyResume={() => void copyResume()}
           onFork={() => void fork()} onRename={() => setSheet("rename")} onRestart={restart} onWindow={() => setSheet("window")}
           online={online} open={s.open} plan={plan} running={running} session={id} tasks={s.tasks}
         />

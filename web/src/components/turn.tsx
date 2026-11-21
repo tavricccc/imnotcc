@@ -105,7 +105,7 @@ function kindOf(step: Item): string {
   }
 }
 
-function Stats({ added, removed }: { added: number | null; removed: number | null }) {
+export function Stats({ added, removed }: { added: number | null; removed: number | null }) {
   if (added == null || removed == null) return <span className="shrink-0 text-ink-faint">二進位</span>;
   return (
     <span className="shrink-0 tabular-nums">

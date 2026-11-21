@@ -10,7 +10,7 @@ import * as changes from './changes.js';
 const runners = new Map();
 const CHANGES_KEPT = 1; // only the latest turn's changes are remembered; the next turn replaces them
 const listeners = new Set(); // (sessionId | null, event) => void; null = for everyone
-let planUsage = null;
+let planUsage = store.get().planUsage ?? null; // the last reading survives a restart
 let cachedControls = null; // slash commands and models, as last read from a running session
 
 export const getPlanUsage = () => planUsage;
@@ -65,6 +65,8 @@ async function readUsage(q) {
   planUsage = usage?.rate_limits_available && usage.rate_limits
     ? { fiveHour: win(usage.rate_limits.five_hour), sevenDay: win(usage.rate_limits.seven_day), at: Date.now() }
     : null;
+  store.get().planUsage = planUsage;
+  store.save();
   emit(null, { kind: 'plan', plan: planUsage });
   return usage;
 }
@@ -92,8 +94,9 @@ class Runner {
     this.pending = new Map(); // permission request id -> { resolve, event }
     this.alwaysAllow = new Set();
     this.idleTimer = null;
-    this.context = null;
-    this.cost = null;
+    // The last context and cost readings, kept in state.json so a restart still shows them.
+    this.context = this.meta?.context ?? null;
+    this.cost = this.meta?.cost ?? null;
     this.draft = ''; // the reply still streaming, for a socket that joins mid-turn
     this.unsent = ''; // streamed text not yet sent to the pages
     // Background work Claude Code reports as live (shells, agents, monitors), as it last listed it.
@@ -455,14 +458,24 @@ class Runner {
         autoCompact: u.isAutoCompactEnabled, model: u.model,
         categories: u.categories.filter((c) => c.kind === 'used' && c.tokens > 0).map((c) => ({ name: c.name, tokens: c.tokens })),
       };
+      this.remember();
       emit(this.id, { kind: 'context', context: this.context });
     } catch (e) { console.error('[imnotcc] context usage:', e.message); }
     try {
       const u = await readUsage(q);
       const s = u?.session;
       this.cost = s ? { usd: s.total_cost_usd, added: s.total_lines_added, removed: s.total_lines_removed } : null;
+      this.remember();
       emit(this.id, { kind: 'cost', cost: this.cost });
     } catch (e) { console.error('[imnotcc] plan usage:', e.message); }
+  }
+
+  remember() {
+    const meta = this.meta;
+    if (!meta) return;
+    meta.context = this.context;
+    meta.cost = this.cost;
+    store.save();
   }
 
   armIdle() {
