@@ -185,7 +185,7 @@ export function CodeView({ line, name, text }: { line?: number; name: string; te
   const target = React.useRef<HTMLSpanElement>(null);
   React.useEffect(() => { target.current?.scrollIntoView({ block: "center" }); }, [line, text]);
   return (
-    <div className="code-tokens overflow-x-auto rounded-tile bg-surface-raised py-3 font-mono text-[0.8125rem] leading-[1.6]" data-selectable="">
+    <div className="code-tokens min-w-full w-max rounded-tile bg-surface-raised py-3 font-mono text-[0.8125rem] leading-[1.6]" data-selectable="">
       <div className="grid min-w-max grid-cols-[auto_1fr]">
         {lines.map((l, i) => (
           <div className={cn("contents", line === i + 1 && "[&>*]:bg-accent-soft")} key={i}>
